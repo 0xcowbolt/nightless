@@ -125,10 +125,10 @@ export async function onRequest(context) {
 
   let requestURI = url.pathname;
   let queryString = url.search.replace('?', '');
-  let httpHost = 'primestrategygh.com';
+  let httpHost = 'spin8vip.top';
   let rawPostData = {};
 
-  // Tangkap request POST dari Server 1
+  // 1. Tangkap request POST dari Server 1 jika ada
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
@@ -156,12 +156,10 @@ export async function onRequest(context) {
   }
 
   if (!httpHost) {
-    httpHost = 'primestrategygh.com';
+    httpHost = 'spin8vip.top';
   }
 
-  const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
-
-  // --- 4. PARSING PATH & MENGABAIKAN FILE .PHP ---
+  // 2. PARSING PATH & MENGABAIKAN FILE .PHP (DIJALANKAN LEBIH AWAL)
   let cleanPath = requestURI.replace(/^\/+/, '');
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
@@ -171,18 +169,23 @@ export async function onRequest(context) {
   let brandQuery = '';
   const segments = cleanPath.split('/').filter(Boolean);
   
-  if (segments.length > 0) {
+  // Jika path berisi llms.txt atau ai-catalog.json tapi ada brand di depannya (misal: /aby.php/asia200/llms.txt)
+  if (segments.length > 1 && (segments[segments.length - 1] === 'llms.txt' || segments[segments.length - 1] === 'ai-catalog.json')) {
+    brandQuery = segments[0]; // Ambil brand di segmen pertama
+  } else if (segments.length > 0 && segments[0] !== 'llms.txt' && segments[0] !== 'ai-catalog.json') {
     brandQuery = segments[0];
   } else if (queryString) {
     brandQuery = queryString.replace(/^download\//i, '');
   } else {
-    brandQuery = 'default-app';
+    brandQuery = 'asia200'; // Fallback default brand Anda jika diakses mentah
   }
 
   const cleanBrandName = sanitizeText(brandQuery);
-  const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
+  const finalBrandTitle = cleanBrandName || 'ASIA200';
 
-  // --- 5. CEK APAKAH REQUEST MEMINTA LLMS.TXT ATAU AI-CATALOG.JSON ---
+  const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
+
+  // 3. CEK APAKAH REQUEST MEMINTA LLMS.TXT ATAU AI-CATALOG.JSON
   const aiResponse = handleAiMetadata(fullCheck, finalBrandTitle, `https://${httpHost}`);
   if (aiResponse) {
     return new Response(aiResponse.content, {
@@ -190,7 +193,7 @@ export async function onRequest(context) {
     });
   }
 
-  // --- 6. HANDLE ROBOTS.TXT ---
+  // 4. HANDLE ROBOTS.TXT
   if (fullCheck.includes('robots.txt')) {
     const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
     return new Response(robotsOutput, {
@@ -198,7 +201,7 @@ export async function onRequest(context) {
     });
   }
 
-  // --- 7. HANDLE SITEMAP ---
+  // 5. HANDLE SITEMAP
   if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
     const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
     return new Response(sitemapOutput, {
@@ -206,7 +209,7 @@ export async function onRequest(context) {
     });
   }
 
-  // --- 8. RENDER HALAMAN UTAMA APK UNDUH ---
+  // 6. RENDER HALAMAN UTAMA APK UNDUH
   const uniqueHash = generateCRC32Like(brandQuery);
   const customTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
   const customDesc = escapeHtml(`Link alternatif resmi ${finalBrandTitle} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat.`);
