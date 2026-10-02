@@ -95,23 +95,36 @@ export async function onRequest(context) {
   }
 
   // --- 5. PARSING PATH & BRAND SEPERTI HOME CONTROLLER ---
+  // --- 5. PARSING PATH & MENGABAIKAN FILE .PHP ---
   let cleanPath = requestURI.replace(/^\/+/, '');
-  if (cleanPath.includes('swop.php')) {
-    const parts = cleanPath.split('swop.php');
-    cleanPath = parts[parts.length - 1].replace(/^\/+/, '');
+
+  // Jika di dalam request_uri terdapat file .php (misal: /aby.php/asia200 atau /index.php/slot), 
+  // potong dan ambil bagian setelah .php
+  if (cleanPath.includes('.php')) {
+    const phpParts = cleanPath.split('.php');
+    // Ambil string setelah ekstensi .php (bisa berupa /asia200 atau ?...)
+    cleanPath = phpParts[phpParts.length - 1].replace(/^\/+/, '');
   }
 
-  // Ambil keyword/brand dari path atau query (contoh: /aby.php?download/uniktoto-slot atau /uniktoto-slot)
+  // Cari slug brand dari sisa path atau query string
   let brandQuery = '';
-  const downloadMatch = `${requestURI}?${queryString}`.match(/(?:download\/|slug=)([a-zA-Z0-9\-_]+)/i);
-  if (downloadMatch && downloadMatch[1]) {
-    brandQuery = downloadMatch[1];
+  const fullCombinedPath = `${cleanPath}?${queryString}`;
+  
+  const downloadMatch = fullCombinedPath.match(/(?:download\/|slug=)?([a-zA-Z0-9\-_]+)/i);
+  
+  // Jika cleanPath memiliki segmen (misal: asia200/subsegmen), ambil segmen pertamanya yang bukan kosong
+  const segments = cleanPath.split('/').filter(Boolean);
+  
+  if (segments.length > 0) {
+    brandQuery = segments[0]; // Ini akan menghasilkan 'asia200' dari /aby.php/asia200
+  } else if (queryString) {
+    // Tangkap dari query jika path kosong
+    brandQuery = queryString.replace(/^download\//i, '');
   } else {
-    const segments = cleanPath.split('/');
-    brandQuery = segments[0] || 'random-app';
+    brandQuery = 'default-app';
   }
 
-  // Jika brand kosong / mengandung kata random, generate secara konsisten/acak
+  // Bersihkan brand dari simbol liar
   const cleanBrandName = sanitizeText(brandQuery);
   const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
 
