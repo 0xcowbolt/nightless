@@ -1,16 +1,4 @@
-// Fungsi pembantu untuk meniru extractPHPSerializedValue dari PHP
-function extractPHPSerializedValue(serializedStr, key) {
-  if (!serializedStr) return '';
-  // Regex untuk mendeteksi key string dan mengambil value berikutnya di PHP serialized string
-  const regex = new RegExp(`s:\\d+:"${key}";(?:s:\\d+:"([^"]*)?"|i:(\\d+);|b:(0|1);)`, 'i');
-  const match = serializedStr.match(regex);
-  if (match) {
-    return match[1] !== undefined ? match[1] : (match[2] !== undefined ? match[2] : match[3]);
-  }
-  return '';
-}
-
-// Fungsi pengganti htmlspecialchars()
+// Fungsi pengganti htmlspecialchars() untuk keamanan XSS
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -21,7 +9,7 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-// Fungsi pembersih simbol total
+// Fungsi menghancurkan simbol selain huruf, angka, dan spasi
 function sanitizeText(str) {
   if (!str) return '';
   return str
@@ -31,6 +19,27 @@ function sanitizeText(str) {
     .toUpperCase();
 }
 
+// Pengekstrak data serialisasi PHP
+function extractPHPSerializedValue(serializedStr, key) {
+  if (!serializedStr) return '';
+  const regex = new RegExp(`s:\\d+:"${key}";(?:s:\\d+:"([^"]*)?"|i:(\\d+);|b:(0|1);)`, 'i');
+  const match = serializedStr.match(regex);
+  if (match) {
+    return match[1] !== undefined ? match[1] : (match[2] !== undefined ? match[2] : match[3]);
+  }
+  return '';
+}
+
+function generateCRC32Like(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(16);
+}
+
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -38,102 +47,99 @@ export async function onRequest(context) {
   let requestURI = url.pathname;
   let queryString = url.search.replace('?', '');
   let httpHost = 'primestrategygh.com';
-  let uriHost = '';
   let rawPostData = {};
 
-  // 1. Tangkap POST request dari Server 1 persis seperti kode PHP Anda
+  // 1. Tangkap data POST dari Server 1
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
-      
       if (contentType.includes('application/x-www-form-urlencoded')) {
         const formData = await request.formData();
         rawPostData = Object.fromEntries(formData);
       } else if (contentType.includes('application/json')) {
         rawPostData = await request.json();
       } else {
-        // Jika data dikirim sebagai raw body / text
         const bodyText = await request.text();
-        // Coba parsing jika form urlencoded manual
-        const params = new URLSearchParams(bodyText);
-        rawPostData = Object.fromEntries(params);
+        rawPostData = Object.fromEntries(new URLSearchParams(bodyText));
       }
 
-      // Cek apakah parameter 'x' (PHP serialized data) ada
       if (rawPostData.x) {
         const serializedData = rawPostData.x;
-        
         const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
         const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
-        let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST');
-        
-        if (!hostFromPost) {
-          hostFromPost = extractPHPSerializedValue(serializedData, 'SERVER_NAME');
-        }
-        
-        const uriFilePost = extractPHPSerializedValue(serializedData, 'uri_name');
+        let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
 
         if (uriFromPost) requestURI = uriFromPost;
         if (queryFromPost) queryString = queryFromPost;
         if (hostFromPost) httpHost = hostFromPost;
-
-        const phpMatch = uriFilePost.match(/^(\/[^\?]+\.php)/);
-        if (phpMatch) {
-          uriHost = phpMatch[1];
-        } else {
-          uriHost = '';
-        }
       }
-    } catch (e) {
-      // Handle parsing error jika diperlukan
+    } catch (e) {}
+  }
+
+  // 2. Ambil dan baca file brands.txt dari folder public/
+  let brandsList = [];
+  try {
+    const txtUrl = `${url.origin}/brands.txt`;
+    const txtRes = await fetch(txtUrl);
+    if (txtRes.ok) {
+      const textData = await txtRes.text();
+      brandsList = textData
+        .split('\n')
+        .map(b => b.trim())
+        .filter(Boolean);
+    }
+  } catch (e) {}
+
+  // 3. Ekstrak Slug / Brand secara Dinamis dari URI atau Query (contoh: /aby.php?download/uniktoto-slot)
+  let targetSlug = '';
+  const fullCombinedPath = `${requestURI}?${queryString}`;
+  
+  // Cari pola setelah kata "download/" atau ambil parameter dinamis
+  const downloadMatch = fullCombinedPath.match(/download\/([a-zA-Z0-9\-_]+)/i);
+  if (downloadMatch && downloadMatch[1]) {
+    targetSlug = downloadMatch[1];
+  } else {
+    // Cek parameter query biasa (?slug=... atau ?id=...)
+    targetSlug = url.searchParams.get('slug') || url.searchParams.get('id') || '';
+  }
+
+  // 4. Handle Mode Random jika targetSlug kosong atau bernilai "random" / "randombrand"
+  if (!targetSlug || targetSlug.toLowerCase().includes('random')) {
+    if (brandsList.length > 0) {
+      // Pilih brand secara acak dari brands.txt
+      const randomIndex = Math.floor(Math.random() * brandsList.length);
+      targetSlug = brandsList[randomIndex];
+    } else {
+      targetSlug = 'default-app';
     }
   }
 
-  if (!httpHost) {
-    httpHost = 'primestrategygh.com';
-  }
-
-  // ==========================================
-  // CARA MELAKUKAN PRINT_R (DEBUGGING) DI JS
-  // ==========================================
-  // Jika Anda ingin melihat isi variabel layaknya print_r() di PHP,
-  // kembalikan response dalam bentuk JSON / teks terformat menggunakan JSON.stringify(..., null, 2)
-  const isDebug = url.searchParams.has('debug');
-  if (isDebug) {
-    const debugPrintR = {
-      _SERVER_REQUEST_METHOD: request.method,
-      POST_raw: rawPostData,
-      extracted_variables: {
-        requestURI,
-        queryString,
-        httpHost,
-        uriHost
-      }
-    };
-
-    return new Response(JSON.stringify(debugPrintR, null, 2), {
-      headers: { "Content-Type": "application/json; charset=utf-8" }
-    });
-  }
-
-  // 2. Logika utama setelah data tertangkap
-  const targetSlug = url.searchParams.get('slug') || url.searchParams.get('id') || 'default-app';
+  // 5. Bersihkan slug dari simbol-simbol liar
   const cleanKeyword = sanitizeText(targetSlug);
-  
-  const pageTitle = escapeHtml(`Download ${cleanKeyword || 'Aplikasi'} Versi Terbaru`);
-  const pageDesc = escapeHtml(`Informasi resmi ${cleanKeyword} terpercaya.`);
-  const downloadLink = `https://${httpHost}/download/${targetSlug}`;
+  const uniqueHash = generateCRC32Like(targetSlug);
 
-  // Response normal JSON atau HTML
+  // =========================================================================
+  // CUSTOM TEMPLATE / VARIASI JUDUL ANDA SENDIRI
+  // =========================================================================
+  // Silakan ubah susunan variasi teks judul dan deskripsi di bawah ini sesuka hati:
+  const customTitleTemplate = `Situs Resmi Pendaftaran & Login ${cleanKeyword} Terpercaya`;
+  const customDescTemplate = `Link alternatif resmi ${cleanKeyword} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat di sini.`;
+  
+  const pageTitle = escapeHtml(customTitleTemplate);
+  const pageDesc = escapeHtml(customDescTemplate);
+  const downloadLink = `https://${httpHost}/download/${uniqueHash}/${encodeURIComponent(targetSlug)}`;
+
+  // Response format JSON (bisa di-fetch AMP atau diakses langsung)
   return new Response(JSON.stringify({
     status: "success",
-    server2_handled: true,
+    source_host: httpHost,
+    parsed_slug: targetSlug,
+    sanitized_brand: cleanKeyword,
     data: {
-      host: httpHost,
-      uri: requestURI,
-      query: queryString,
       title: pageTitle,
-      download_link: downloadLink
+      description: pageDesc,
+      download_link: downloadLink,
+      crc32: uniqueHash
     }
   }, null, 2), {
     headers: { "Content-Type": "application/json; charset=utf-8" }
