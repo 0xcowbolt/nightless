@@ -1,5 +1,6 @@
-import { escapeHtml, sanitizeText, extractPHPSerializedValue, generateCRC32Like } from '../utils/parser.js';
+import { extractPHPSerializedValue } from '../utils/parser.js';
 import { handleAiMetadata } from '../utils/aiMetadata.js';
+import { getBrandSeoData } from '../utils/seoData.js';
 import { renderDownloadPage } from '../views/template.js';
 
 export async function onRequest(context) {
@@ -62,7 +63,7 @@ export async function onRequest(context) {
     return new Response(sitemapOutput, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
   }
 
-  // 5. Parsing Path & Abaikan .php untuk Halaman Utama Brand
+  // 5. Parsing Path & Abaikan .php untuk Halaman Brand
   let cleanPath = requestURI.replace(/^\/+/, '');
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
@@ -79,16 +80,11 @@ export async function onRequest(context) {
     brandQuery = 'default-app';
   }
 
-  const cleanBrandName = sanitizeText(brandQuery);
-  const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
-  const uniqueHash = generateCRC32Like(brandQuery);
+  // 6. Ambil Semua Data SEO & Variabel Brand dari Modul Terpisah
+  const seoData = getBrandSeoData(brandQuery, httpHost);
 
-  const customTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
-  const customDesc = escapeHtml(`Link alternatif resmi ${finalBrandTitle} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat.`);
-  const downloadLink = `https://download.store-files.com/apk/${uniqueHash}/${encodeURIComponent(brandQuery)}.apk`;
-
-  // 6. Render HTML dari modul terpisah
-  const htmlTemplate = renderDownloadPage({ customTitle, customDesc, downloadLink });
+  // 7. Render HTML Menggunakan Data Terstruktur
+  const htmlTemplate = renderDownloadPage(seoData);
 
   return new Response(htmlTemplate, {
     headers: { 
