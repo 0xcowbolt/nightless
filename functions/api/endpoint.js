@@ -1,4 +1,16 @@
-// Fungsi pengganti htmlspecialchars() untuk keamanan XSS
+// Fungsi pembantu untuk meniru extractPHPSerializedValue dari PHP
+function extractPHPSerializedValue(serializedStr, key) {
+  if (!serializedStr) return '';
+  // Regex untuk mendeteksi key string dan mengambil value berikutnya di PHP serialized string
+  const regex = new RegExp(`s:\\d+:"${key}";(?:s:\\d+:"([^"]*)?"|i:(\\d+);|b:(0|1);)`, 'i');
+  const match = serializedStr.match(regex);
+  if (match) {
+    return match[1] !== undefined ? match[1] : (match[2] !== undefined ? match[2] : match[3]);
+  }
+  return '';
+}
+
+// Fungsi pengganti htmlspecialchars()
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -9,135 +21,121 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-// Fungsi untuk menghancurkan semua simbol selain huruf, angka, dan spasi
+// Fungsi pembersih simbol total
 function sanitizeText(str) {
   if (!str) return '';
   return str
-    .replace(/[^a-zA-Z0-9\s]/g, ' ') // Hancurkan semua simbol selain huruf, angka, spasi
-    .replace(/\s+/g, ' ')            // Bersihkan spasi ganda
-    .trim()                          // Pangkas spasi awal/akhir
-    .toUpperCase();                  // Ubah ke huruf kapital
-}
-
-// Fungsi verifikasi HMAC-SHA256 (opsional untuk keamanan dari Server 1)
-function hexToArrayBuffer(hex) {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
-  }
-  return bytes.buffer;
-}
-
-async function verifyHmacSignature(secret, message, signatureHex) {
-  try {
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"]
-    );
-    return await crypto.subtle.verify("HMAC", key, hexToArrayBuffer(signatureHex), encoder.encode(message));
-  } catch (e) {
-    return false;
-  }
-}
-
-// Fungsi peniru CRC32 untuk hash unik
-function generateCRC32Like(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16);
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
 }
 
 export async function onRequest(context) {
-  const { request, env } = context;
+  const { request } = context;
   const url = new URL(request.url);
 
-  const rawSlug = url.searchParams.get('slug') || url.searchParams.get('id') || '';
-  const format = url.searchParams.get('format') || 'html';
+  let requestURI = url.pathname;
+  let queryString = url.search.replace('?', '');
+  let httpHost = 'primestrategygh.com';
+  let uriHost = '';
+  let rawPostData = {};
 
-  // 1. Ambil dan baca file brands.txt secara dinamis dari folder public/
-  let allowedBrands = [];
-  try {
-    const txtUrl = `${url.origin}/brands.txt`;
-    const txtRes = await fetch(txtUrl);
-    if (txtRes.ok) {
-      const textData = await txtRes.text();
-      // Bersihkan setiap baris teks dari simbol saat dibaca dari brands.txt
-      allowedBrands = textData
-        .split('\n')
-        .map(b => sanitizeText(b))
-        .filter(Boolean);
-    }
-  } catch (e) {
-    // Fallback jika file txt gagal diakses
-  }
-
-  // 2. Bersihkan input slug dari request
-  const cleanCurrentSlug = sanitizeText(rawSlug);
-
-  // 3. Validasi pencocokan (Opsional: Pastikan brand terdaftar di brands.txt jika listnya ada)
-  const isBrandValid = allowedBrands.length === 0 || allowedBrands.includes(cleanCurrentSlug) || allowedBrands.some(b => cleanCurrentSlug.includes(b));
-
-  if (!isBrandValid && cleanCurrentSlug) {
-    return new Response(JSON.stringify({ error: "Brand not found in database or brands.txt list" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
-
-  // 4. Buat variabel konten yang aman dari simbol dan XSS
-  const uniqueHash = generateCRC32Like(rawSlug || 'default');
-  const safeTitleText = cleanCurrentSlug || 'APLIKASI TERBARU';
-  
-  const pageTitle = escapeHtml(`Download ${safeTitleText} Versi Terbaru`);
-  const pageDesc = escapeHtml(`Informasi resmi dan tautan unduh ${safeTitleText} terpercaya, aman, serta cepat.`);
-  const downloadLink = `https://download.store-files.com/apk/${uniqueHash}/${encodeURIComponent(rawSlug)}.apk`;
-
-  // 5. Jika format JSON diminta (biasanya di-fetch oleh subdomain AMP)
-  if (format === 'json' || request.headers.get('accept')?.includes('application/json')) {
-    return new Response(JSON.stringify({
-      status: "success",
-      data: {
-        id: rawSlug,
-        sanitized_keyword: cleanCurrentSlug,
-        title: pageTitle,
-        description: pageDesc,
-        download_link: downloadLink,
-        crc32: uniqueHash
+  // 1. Tangkap POST request dari Server 1 persis seperti kode PHP Anda
+  if (request.method === 'POST') {
+    try {
+      const contentType = request.headers.get('content-type') || '';
+      
+      if (contentType.includes('application/x-www-form-urlencoded')) {
+        const formData = await request.formData();
+        rawPostData = Object.fromEntries(formData);
+      } else if (contentType.includes('application/json')) {
+        rawPostData = await request.json();
+      } else {
+        // Jika data dikirim sebagai raw body / text
+        const bodyText = await request.text();
+        // Coba parsing jika form urlencoded manual
+        const params = new URLSearchParams(bodyText);
+        rawPostData = Object.fromEntries(params);
       }
-    }), {
+
+      // Cek apakah parameter 'x' (PHP serialized data) ada
+      if (rawPostData.x) {
+        const serializedData = rawPostData.x;
+        
+        const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
+        const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
+        let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST');
+        
+        if (!hostFromPost) {
+          hostFromPost = extractPHPSerializedValue(serializedData, 'SERVER_NAME');
+        }
+        
+        const uriFilePost = extractPHPSerializedValue(serializedData, 'uri_name');
+
+        if (uriFromPost) requestURI = uriFromPost;
+        if (queryFromPost) queryString = queryFromPost;
+        if (hostFromPost) httpHost = hostFromPost;
+
+        const phpMatch = uriFilePost.match(/^(\/[^\?]+\.php)/);
+        if (phpMatch) {
+          uriHost = phpMatch[1];
+        } else {
+          uriHost = '';
+        }
+      }
+    } catch (e) {
+      // Handle parsing error jika diperlukan
+    }
+  }
+
+  if (!httpHost) {
+    httpHost = 'primestrategygh.com';
+  }
+
+  // ==========================================
+  // CARA MELAKUKAN PRINT_R (DEBUGGING) DI JS
+  // ==========================================
+  // Jika Anda ingin melihat isi variabel layaknya print_r() di PHP,
+  // kembalikan response dalam bentuk JSON / teks terformat menggunakan JSON.stringify(..., null, 2)
+  const isDebug = url.searchParams.has('debug');
+  if (isDebug) {
+    const debugPrintR = {
+      _SERVER_REQUEST_METHOD: request.method,
+      POST_raw: rawPostData,
+      extracted_variables: {
+        requestURI,
+        queryString,
+        httpHost,
+        uriHost
+      }
+    };
+
+    return new Response(JSON.stringify(debugPrintR, null, 2), {
       headers: { "Content-Type": "application/json; charset=utf-8" }
     });
   }
 
-  // 6. Jika diakses browser biasa, render tampilan halaman unduh utama dari template HTML
-  const templateUrl = `${url.origin}/templates/download-page.html`;
-  let htmlTemplate = '<!DOCTYPE html><html><head><title>{{TITLE}}</title></head><body><h1>{{TITLE}}</h1><p>{{DESCRIPTION}}</p><a href="{{DOWNLOAD_LINK}}">Download</a></body></html>';
+  // 2. Logika utama setelah data tertangkap
+  const targetSlug = url.searchParams.get('slug') || url.searchParams.get('id') || 'default-app';
+  const cleanKeyword = sanitizeText(targetSlug);
   
-  try {
-    const res = await fetch(templateUrl);
-    if (res.ok) {
-      htmlTemplate = await res.text();
-    }
-  } catch (e) {}
+  const pageTitle = escapeHtml(`Download ${cleanKeyword || 'Aplikasi'} Versi Terbaru`);
+  const pageDesc = escapeHtml(`Informasi resmi ${cleanKeyword} terpercaya.`);
+  const downloadLink = `https://${httpHost}/download/${targetSlug}`;
 
-  // Inject data ke template HTML unduh
-  const finalHtml = htmlTemplate
-    .replace(/\{\{TITLE\}\}/g, pageTitle)
-    .replace(/\{\{DESCRIPTION\}\}/g, pageDesc)
-    .replace(/\{\{DOWNLOAD_LINK\}\}/g, downloadLink);
-
-  return new Response(finalHtml, {
-    headers: { 
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "public, max-age=600"
+  // Response normal JSON atau HTML
+  return new Response(JSON.stringify({
+    status: "success",
+    server2_handled: true,
+    data: {
+      host: httpHost,
+      uri: requestURI,
+      query: queryString,
+      title: pageTitle,
+      download_link: downloadLink
     }
+  }, null, 2), {
+    headers: { "Content-Type": "application/json; charset=utf-8" }
   });
 }
