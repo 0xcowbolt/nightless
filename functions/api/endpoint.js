@@ -12,8 +12,8 @@ function escapeHtml(str) {
 function sanitizeText(str) {
   if (!str) return '';
   return str
-    .replace(/[^a-zA-Z0-9\s]/g, ' ') // Hancurkan simbol selain huruf, angka, spasi
-    .replace(/\s+/g, ' ')            // Rapikan spasi ganda
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase();
 }
@@ -39,6 +39,86 @@ function generateCRC32Like(str) {
   return Math.abs(hash).toString(16);
 }
 
+// --- 3. GENERATOR METADATA AI (TERJEMAHAN DARI PHP) ---
+function handleAiMetadata(requestPath, primaryBrandName, baseHost) {
+  if (!primaryBrandName) {
+    primaryBrandName = 'Portal Layanan Digital';
+  }
+
+  // Bersihkan base_host
+  if (!/^https?:\/\//i.test(baseHost)) {
+    baseHost = "https://" + baseHost.replace(/^\/+/, '');
+  }
+  baseHost = baseHost.replace(/\/+$/, '');
+
+  const cleanBrand = primaryBrandName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'portalbrand';
+  const hostOnly = baseHost.replace(/^https?:\/\//i, '');
+
+  // 1. Handle llms.txt
+  if (requestPath.includes("llms.txt")) {
+    let output = `# ${primaryBrandName}\n\n`;
+    output += `> Portal resmi dan pusat layanan digital terintegrasi untuk ${primaryBrandName}.\n\n`;
+    
+    output += `## Tentang Layanan\n`;
+    output += `${primaryBrandName} adalah platform digital yang menyediakan akses cepat, aman, dan terstruktur ke berbagai layanan unggulan serta informasi produk terlengkap.\n\n`;
+
+    output += `## Tautan Utama & Navigasi\n`;
+    output += `- [Beranda](${baseHost}/): Halaman utama portal layanan.\n`;
+    output += `- [Katalog Produk & Layanan](${baseHost}/katalog): Daftar lengkap layanan yang tersedia.\n`;
+    output += `- [Pusat Bantuan & FAQ](${baseHost}/faq): Informasi tanya jawab dan panduan penggunaan.\n`;
+    output += `- [Hubungi Kami](${baseHost}/kontak): Layanan dukungan pelanggan dan komunikasi resmi.\n\n`;
+
+    output += `## Kebijakan & Informasi Legal\n`;
+    output += `- [Kebijakan Privasi](${baseHost}/privacy-policy): Ketentuan perlindungan data pengguna.\n`;
+    output += `- [Syarat & Ketentuan](${baseHost}/terms-of-service): Aturan penggunaan layanan platform.\n`;
+    output += `- [Disclaimer](${baseHost}/disclaimer): Batasan tanggung jawab informasi situs.\n`;
+
+    return { content: output, contentType: "text/plain; charset=utf-8" };
+  }
+
+  // 2. Handle ai-catalog.json
+  if (requestPath.includes("ai-catalog.json")) {
+    const jsonData = {
+      specVersion: "1.0",
+      host: {
+        displayName: primaryBrandName,
+        identifier: "did:web:" + hostOnly,
+        documentationUrl: `${baseHost}/llms.txt`
+      },
+      entries: [
+        {
+          identifier: `urn:air:${cleanBrand}:catalog:main`,
+          type: "application/ai-catalog+json",
+          displayName: "Katalog Utama " + primaryBrandName,
+          url: `${baseHost}/katalog`,
+          description: "Katalog resmi dan informasi layanan komprehensif dari " + primaryBrandName + ".",
+          representativeQueries: [
+            primaryBrandName,
+            "situs resmi " + primaryBrandName,
+            "katalog " + primaryBrandName,
+            "layanan " + primaryBrandName
+          ]
+        },
+        {
+          identifier: `urn:air:${cleanBrand}:catalog:support`,
+          type: "application/ai-catalog+json",
+          displayName: "Pusat Bantuan " + primaryBrandName,
+          url: `${baseHost}/faq`,
+          description: "Informasi bantuan, tanya jawab, dan dukungan pelanggan.",
+          representativeQueries: [
+            "bantuan " + primaryBrandName,
+            "kontak " + primaryBrandName
+          ]
+        }
+      ]
+    };
+
+    return { content: JSON.stringify(jsonData, null, 2), contentType: "application/json; charset=utf-8" };
+  }
+
+  return null;
+}
+
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -48,7 +128,7 @@ export async function onRequest(context) {
   let httpHost = 'primestrategygh.com';
   let rawPostData = {};
 
-  // Tangkap request POST (berisi parameter 'x' dari Server 1)
+  // Tangkap request POST dari Server 1
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
@@ -81,23 +161,7 @@ export async function onRequest(context) {
 
   const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
 
-  // --- 3. HANDLE ROBOTS.TXT ---
-  if (fullCheck.includes('robots.txt')) {
-    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
-    return new Response(robotsOutput, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
-    });
-  }
-
-  // --- 4. HANDLE SITEMAP ---
-  if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
-    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
-    return new Response(sitemapOutput, {
-      headers: { "Content-Type": "text/xml; charset=utf-8" }
-    });
-  }
-
-  // --- 5. PARSING PATH & MENGABAIKAN FILE .PHP ---
+  // --- 4. PARSING PATH & MENGABAIKAN FILE .PHP ---
   let cleanPath = requestURI.replace(/^\/+/, '');
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
@@ -108,7 +172,7 @@ export async function onRequest(context) {
   const segments = cleanPath.split('/').filter(Boolean);
   
   if (segments.length > 0) {
-    brandQuery = segments[0]; // Mengambil slug setelah .php (misal: asia200)
+    brandQuery = segments[0];
   } else if (queryString) {
     brandQuery = queryString.replace(/^download\//i, '');
   } else {
@@ -117,32 +181,37 @@ export async function onRequest(context) {
 
   const cleanBrandName = sanitizeText(brandQuery);
   const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
-  const uniqueHash = generateCRC32Like(brandQuery);
 
-  // --- 6. DATA SEO & TEMPLATE ---
+  // --- 5. CEK APAKAH REQUEST MEMINTA LLMS.TXT ATAU AI-CATALOG.JSON ---
+  const aiResponse = handleAiMetadata(fullCheck, finalBrandTitle, `https://${httpHost}`);
+  if (aiResponse) {
+    return new Response(aiResponse.content, {
+      headers: { "Content-Type": aiResponse.contentType }
+    });
+  }
+
+  // --- 6. HANDLE ROBOTS.TXT ---
+  if (fullCheck.includes('robots.txt')) {
+    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
+    return new Response(robotsOutput, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    });
+  }
+
+  // --- 7. HANDLE SITEMAP ---
+  if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
+    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
+    return new Response(sitemapOutput, {
+      headers: { "Content-Type": "text/xml; charset=utf-8" }
+    });
+  }
+
+  // --- 8. RENDER HALAMAN UTAMA APK UNDUH ---
+  const uniqueHash = generateCRC32Like(brandQuery);
   const customTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
   const customDesc = escapeHtml(`Link alternatif resmi ${finalBrandTitle} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat.`);
   const downloadLink = `https://download.store-files.com/apk/${uniqueHash}/${encodeURIComponent(brandQuery)}.apk`;
 
-  // Cek apakah format JSON diminta (misal oleh AMP)
-  const format = url.searchParams.get('format') || 'html';
-  if (format === 'json' || request.headers.get('accept')?.includes('application/json')) {
-    return new Response(JSON.stringify({
-      status: "success",
-      engine: "Cloudflare Server 2",
-      data: {
-        host: httpHost,
-        brand_code: finalBrandTitle,
-        title: customTitle,
-        description: customDesc,
-        download_link: downloadLink
-      }
-    }, null, 2), {
-      headers: { "Content-Type": "application/json; charset=utf-8" }
-    });
-  }
-
-  // --- 7. RENDER HTML TEMPLATE UTAMA APK UNDUH ---
   const htmlTemplate = `<!DOCTYPE html>
 <html lang="id">
 <head>
