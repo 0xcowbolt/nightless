@@ -10,6 +10,7 @@ export async function onRequest(context) {
   let requestURI = url.pathname;
   let queryString = url.search.replace('?', '');
   let httpHost = 'spin8vip.top';
+  let uriFilePost = '';
   let rawPostData = {};
 
   if (request.method === 'POST') {
@@ -30,19 +31,34 @@ export async function onRequest(context) {
         const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
         const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
         let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
+        
+        // Tangkap uri_name dari payload PHP Anda
+        const rawUriName = extractPHPSerializedValue(serializedData, 'uri_name');
 
         if (uriFromPost) requestURI = uriFromPost;
         if (queryFromPost) queryString = queryFromPost;
         if (hostFromPost) httpHost = hostFromPost;
+        
+        if (rawUriName) {
+          // Setara dengan preg_match('/^(\/[^\?]+\.php)/', $uriFilePost,$matches) di PHP
+          const matchPhp = rawUriName.match(/^(\/[^\?]+\.php)/);
+          uriFilePost = matchPhp ? matchPhp[1] : '';
+        }
       }
     } catch (e) {}
   }
 
   if (!httpHost) httpHost = url.host || 'spin8vip.top';
+  
+  // Rekonstruksi BaseURL dan BaseUrlUri persis seperti logika PHP Anda
+  const pubHost = httpHost;
+  const publicPathUri = `https://${pubHost}${uriFilePost}`;
+  const publicFull = request.url; // Atau gabungan lengkap path + query saat ini
+
   const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
 
   // 1. Cek AI Metadata (llms.txt / ai-catalog.json)
-  const aiResponse = await handleAiMetadata(fullCheck, `https://${httpHost}`, url.origin);
+  const aiResponse = await handleAiMetadata(fullCheck, `https://${pubHost}`, url.origin);
   if (aiResponse) {
     return new Response(aiResponse.content, {
       headers: { "Content-Type": aiResponse.contentType }
@@ -51,21 +67,20 @@ export async function onRequest(context) {
 
   // 2. Robots.txt
   if (fullCheck.includes('robots.txt')) {
-    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
+    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${pubHost}/sitemap-wp.xml`;
     return new Response(robotsOutput, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 
   // 3. Sitemap
   if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
-    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
+    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${pubHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
     return new Response(sitemapOutput, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
   }
 
-  // 4. Parsing Brand Query Universal (Mendukung /action/brand, .php, dan query string)
+  // 4. Parsing Brand Query Universal
   let cleanPath = requestURI.replace(/^\/+/, '');
   let brandQuery = '';
 
-  // Cek jika path mengandung ekstensi .php secara dinamis
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
     const afterPhp = phpParts[1] ? phpParts[1].replace(/^\/+/, '') : '';
@@ -76,23 +91,20 @@ export async function onRequest(context) {
     }
   }
 
-  // Jika belum tertangkap, cek struktur folder /action/brand (misal: /install/k200m)
   if (!brandQuery) {
     const segments = cleanPath.split('/').filter(Boolean);
     if (segments.length >= 2) {
-      brandQuery = segments[segments.length - 1]; // Ambil nama brand di segmen terakhir
+      brandQuery = segments[segments.length - 1];
     } else if (segments.length === 1 && !segments[0].includes('.php')) {
       brandQuery = segments[0];
     }
   }
 
-  // Jika masih kosong, ambil dari query string
   if (!brandQuery && queryString) {
     const queryClean = queryString.replace(/^[\/a-zA-Z_-]+\/+/i, '').replace(/^\/+/, '');
     brandQuery = queryClean || queryString;
   }
 
-  // Daftar kata aksi umum atau nama file yang tidak boleh dianggap sebagai brand name
   const blacklistedWords = ['install', 'download', 'apk', 'app', 'update', 'mobile', 'index.php', 'aby.php'];
   
   if (!brandQuery || blacklistedWords.includes(brandQuery.toLowerCase()) || brandQuery.toLowerCase().endsWith('.php')) {
@@ -100,8 +112,15 @@ export async function onRequest(context) {
   }
 
   try {
-    // 5. AMBIL DATA SEO & RENDER HALAMAN
-    const seoData = await getBrandSeoData(brandQuery, httpHost, url.origin);
+    // 5. AMBIL DATA SEO & Masukkan variabel base URL hasil rekonstruksi ke data SEO
+    const seoData = await getBrandSeoData(brandQuery, pubHost, url.origin);
+    
+    // Timpa link kanonik dengan struktur publicPathUri yang membawa file .php asal jika diperlukan
+    if (publicPathUri && publicPathUri !== `https://${pubHost}`) {
+      seoData.downloadLink = `${publicPathUri}/${brandQuery}`;
+    }
+
+    // 6. RENDER HTML
     const htmlTemplate = renderDownloadPage(seoData);
 
     return new Response(htmlTemplate, {
