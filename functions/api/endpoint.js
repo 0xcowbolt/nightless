@@ -1,7 +1,7 @@
-import { extractPHPSerializedValue } from '../utils/parser.js';
-import { handleAiMetadata } from '../utils/aiMetadata.js';
-import { getBrandSeoData } from '../utils/seoData.js';
-import { renderDownloadPage } from '../views/template.js';
+import { extractPHPSerializedValue } from '../parser.js';
+import { handleAiMetadata } from '../aiMetadata.js';
+import { getBrandSeoData } from '../seoData.js';
+import { renderDownloadPage } from '../template.js';
 
 export async function onRequest(context) {
   const { request } = context;
@@ -61,25 +61,46 @@ export async function onRequest(context) {
     return new Response(sitemapOutput, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
   }
 
-  // 4. Parsing Brand Query dari Path URL
+  // 4. Parsing Brand Query Universal (Mendukung .php, /action/brand, dan query string)
   let cleanPath = requestURI.replace(/^\/+/, '');
+  let brandQuery = '';
+
+  // Pendekatan Universal: Cek jika path mengandung ekstensi .php secara dinamis
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
-    cleanPath = phpParts[phpParts.length - 1].replace(/^\/+/, '');
+    const afterPhp = phpParts[1] ? phpParts[1].replace(/^\/+/, '') : '';
+    
+    if (afterPhp) {
+      const subSegments = afterPhp.split('/').filter(Boolean);
+      brandQuery = subSegments[subSegments.length - 1];
+    }
   }
 
-  let brandQuery = '';
-  const segments = cleanPath.split('/').filter(Boolean);
-  if (segments.length > 0) {
-    brandQuery = segments[segments.length - 1]; // Ambil segmen terakhir sebagai brand jika berupa /brand/download
-  } else if (queryString) {
-    brandQuery = queryString.replace(/^download\//i, '');
-  } else {
+  // Jika belum tertangkap dari path .php, cek struktur folder standar /action/brand (misal: /install/asia200)
+  if (!brandQuery) {
+    const segments = cleanPath.split('/').filter(Boolean);
+    if (segments.length >= 2) {
+      brandQuery = segments[segments.length - 1];
+    } else if (segments.length === 1 && !segments[0].includes('.php')) {
+      brandQuery = segments[0];
+    }
+  }
+
+  // Jika masih kosong, ambil dari query string (misal: ?asia200)
+  if (!brandQuery && queryString) {
+    const queryClean = queryString.replace(/^[\/a-zA-Z_-]+\/+/i, '').replace(/^\/+/, '');
+    brandQuery = queryClean || queryString;
+  }
+
+  // Daftar kata aksi umum atau nama file yang tidak boleh dianggap sebagai brand name
+  const blacklistedWords = ['install', 'download', 'apk', 'app', 'update', 'mobile', 'index.php', 'aby.php'];
+  
+  if (!brandQuery || blacklistedWords.includes(brandQuery.toLowerCase()) || brandQuery.toLowerCase().endsWith('.php')) {
     brandQuery = 'default-app';
   }
 
   try {
-    // 5. AMBIL DATA SEO (WAJIB MENGGUNAKAN AWAIT)
+    // 5. AMBIL DATA SEO
     const seoData = await getBrandSeoData(brandQuery, httpHost, url.origin);
 
     // 6. RENDER HTML
@@ -92,7 +113,6 @@ export async function onRequest(context) {
       }
     });
   } catch (err) {
-    // Jika terjadi error 500, tampilkan pesannya agar mudah di-debug
     return new Response(`Internal Server Error: ${err.message}`, { 
       status: 500,
       headers: { "Content-Type": "text/plain; charset=utf-8" }
