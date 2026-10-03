@@ -6,7 +6,10 @@ import {
   getParagraphsData, 
   getWhatsNewData, 
   getDescriptionData, 
-  getKeywordData 
+  getKeywordData,
+  getBrandDetailsData,
+  getCategoryData,
+  getBackgroundColorsData
 } from './reviewPriceData.js';
 
 export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
@@ -14,26 +17,25 @@ export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
   const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
   const uniqueHash = generateCRC32Like(brandQuery);
 
-  // Gunakan fungsi dinamis yang baru dipindahkan
+  // Ambil detail brand dinamis (versi, ukuran, OS, rating, dll)
+  const brandDetails = getBrandDetailsData(uniqueHash, {}, [], finalBrandTitle);
+  const appCategory = getCategoryData(uniqueHash);
+  const bgColors = getBackgroundColorsData(uniqueHash);
+
   const rawDescription = getDescriptionData(uniqueHash, finalBrandTitle, httpHost);
   const rawKeywords = getKeywordData(uniqueHash, finalBrandTitle, httpHost);
 
   const seoTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
   const description = escapeHtml(rawDescription);
   const keywords = escapeHtml(rawKeywords);
-
-  const appVersion = "3.2.1";
-  const appSize = "18.5 MB";
-  const appOS = "Android";
-  const appRating = "4.8";
   const downloadLink = `https://download.store-files.com/apk/${uniqueHash}/${encodeURIComponent(brandQuery)}.apk`;
-  const imageUrl = `https://${httpHost}/assets/images/${brandQuery}.png`;
 
+  // Ambil semua data pendukung secara paralel
   const [faqs, relatedData, priceInfo, reviewsInfo, paragraphs, whatsNew] = await Promise.all([
     getSelectedFaqs(uniqueHash, finalBrandTitle, urlOrigin),
-    getSimilarAndRelated(uniqueHash, finalBrandTitle, appOS, appSize, urlOrigin),
+    getSimilarAndRelated(uniqueHash, finalBrandTitle, brandDetails.appOS, brandDetails.appSize, urlOrigin),
     Promise.resolve(getPriceData(uniqueHash)),
-    getReviewsData(uniqueHash, finalBrandTitle, appOS, appSize),
+    getReviewsData(uniqueHash, finalBrandTitle, brandDetails.appOS, brandDetails.appSize),
     getParagraphsData(uniqueHash, finalBrandTitle),
     getWhatsNewData(uniqueHash, finalBrandTitle)
   ]);
@@ -43,11 +45,19 @@ export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
     seoTitle,
     description,
     keywords,
-    appVersion,
-    appSize,
-    appOS,
-    appRating,
-    imageUrl,
+    appVersion: brandDetails.appVersion,
+    appSize: brandDetails.appSize,
+    appOS: brandDetails.appOS,
+    appDownloads: brandDetails.appDownloads,
+    appBahasa: brandDetails.appBahasa,
+    displayDate: brandDetails.displayDate,
+    appSha: brandDetails.appSha,
+    appDate: brandDetails.appDate,
+    appRating: brandDetails.appRating,
+    appReviewCount: brandDetails.appReviewCount,
+    imageUrl: brandDetails.imageUrl,
+    appCategory,
+    bgColors,
     downloadLink,
     faqs,
     similarApps: relatedData.similarApps,
