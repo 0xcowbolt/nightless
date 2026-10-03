@@ -1,6 +1,6 @@
 import { escapeHtml, sanitizeText, generateCRC32Like } from './parser.js';
 import { getSelectedFaqs, getSimilarAndRelated } from './faqAndSimilar.js';
-import { getPriceData, getReviewsData, getParagraphsData } from './reviewPriceData.js';
+import { getPriceData, getReviewsData, getParagraphsData, getWhatsNewData } from './reviewPriceData.js';
 
 export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
   const cleanBrandName = sanitizeText(brandQuery);
@@ -26,7 +26,8 @@ export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
     getSimilarAndRelated(uniqueHash, finalBrandTitle, appOS, appSize, urlOrigin),
     Promise.resolve(getPriceData(uniqueHash)),
     getReviewsData(uniqueHash, finalBrandTitle, appOS, appSize),
-    getParagraphsData(uniqueHash, finalBrandTitle)
+    getParagraphsData(uniqueHash, finalBrandTitle),
+    getWhatsNewData(uniqueHash, finalBrandTitle)
   ]);
 
   // 4. Return Objek Terstruktur Lengkap untuk Template HTML
@@ -44,9 +45,10 @@ export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
     faqs,
     similarApps: relatedData.similarApps,
     relatedTopics: relatedData.relatedTopics,
-    priceData: priceInfo,          // Berisi appPrice, priceCurrency, isFree
-    reviews: reviewsInfo.reviews,  // Berisi list komentar ulasan
-    reviewSchemas: reviewsInfo.reviewSchemas, // Berisi JSON-LD schema review
-    paragraphs                     // Berisi array paragraf dinamis
+    priceData: priceInfo,
+    reviews: reviewsInfo.reviews,
+    reviewSchemas: reviewsInfo.reviewSchemas,
+    paragraphs,
+    whatsNew // Dikirim ke template
   };
 }
