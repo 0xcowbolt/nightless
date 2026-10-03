@@ -143,3 +143,44 @@ export async function getParagraphsData(uniqueKey, brandName = '') {
 
   return selectedParagraphs;
 }
+
+export async function getWhatsNewData(uniqueKey, brandName = '') {
+  let masterWhatsNew = [];
+
+  try {
+    const res = await fetch('https://sweet-mode-a6d9.kontrirod.workers.dev/whatsnew.json');
+    if (res.ok) masterWhatsNew = await res.json();
+  } catch (e) {}
+
+  if (!masterWhatsNew.length) {
+    masterWhatsNew = [
+      "Pembaruan sistem keamanan dan enkripsi data terbaru untuk {brand}.",
+      "Optimalisasi kecepatan unduh file APK dan peningkatan kestabilan server.",
+      "Perbaikan bug minor pada antarmuka pengguna.",
+      "Penambahan fitur dukungan multi-perangkat."
+    ];
+  }
+
+  const uniqueHashNum = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  let countWhatsNew = 4 + (uniqueHashNum % 3);
+  if (countWhatsNew < 4) countWhatsNew = 4;
+
+  let tempWhatsNew = masterWhatsNew.map((item, index) => {
+    const sortKey = parseInt(generateCRC32Like(`${index}_${uniqueKey}`), 16) || index;
+    return { item, sortKey };
+  });
+
+  tempWhatsNew.sort((a, b) => a.sortKey - b.sortKey);
+
+  const rawSelected = tempWhatsNew.slice(0, countWhatsNew);
+  const selectedWhatsNew = rawSelected.map(wrapper => {
+    let item = wrapper.item;
+    if (brandName && typeof item === 'string') {
+      const formattedBrand = brandName.charAt(0).toUpperCase() + brandName.slice(1).toLowerCase();
+      item = item.replace(/\{brand\}/g, formattedBrand);
+    }
+    return item;
+  });
+
+  return selectedWhatsNew;
+}
