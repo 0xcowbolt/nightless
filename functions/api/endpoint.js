@@ -24,18 +24,28 @@ export async function onRequest(context) {
         const bodyText = await request.text();
         rawPostData = Object.fromEntries(new URLSearchParams(bodyText));
       }
-
-      if (rawPostData.x) {
-        const serializedData = rawPostData.x;
-        const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
-        const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
-        let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
-
-        if (uriFromPost) requestURI = uriFromPost;
-        if (queryFromPost) queryString = queryFromPost;
-        if (hostFromPost) httpHost = hostFromPost;
-      }
     } catch (e) {}
+  } else {
+    // =========================================================================
+    // SIMULASI ARRAY POST (Fallback untuk testing langsung / GET request)
+    // Silakan sesuaikan nilai di dalam array ini untuk pengujian manual
+    // =========================================================================
+    rawPostData = {
+      // Contoh string serialisasi PHP tiruan jika dibutuhkan, atau biarkan kosong
+      // x: 's:11:"REQUEST_URI";s:10:"/asia200";s:12:"QUERY_STRING";s:0:"";s:9:"HTTP_HOST";s:12:"spin8vip.top";'
+    };
+  }
+
+  // Jika ada kiriman 'x' (baik dari POST cURL PHP maupun dari simulasi array di atas)
+  if (rawPostData.x) {
+    const serializedData = rawPostData.x;
+    const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
+    const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
+    let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
+
+    if (uriFromPost) requestURI = uriFromPost;
+    if (queryFromPost) queryString = queryFromPost;
+    if (hostFromPost) httpHost = hostFromPost;
   }
 
   if (!httpHost) httpHost = 'spin8vip.top';
@@ -71,7 +81,7 @@ export async function onRequest(context) {
   let brandQuery = '';
   const segments = cleanPath.split('/').filter(Boolean);
   if (segments.length > 0) {
-    brandQuery = segments[segments.length - 1]; // Ambil segmen terakhir sebagai brand jika berupa /brand/download
+    brandQuery = segments[segments.length - 1]; 
   } else if (queryString) {
     brandQuery = queryString.replace(/^download\//i, '');
   } else {
@@ -79,7 +89,7 @@ export async function onRequest(context) {
   }
 
   try {
-    // 5. AMBIL DATA SEO (WAJIB MENGGUNAKAN AWAIT)
+    // 5. AMBIL DATA SEO
     const seoData = await getBrandSeoData(brandQuery, httpHost, url.origin);
 
     // 6. RENDER HTML
@@ -92,7 +102,6 @@ export async function onRequest(context) {
       }
     });
   } catch (err) {
-    // Jika terjadi error 500, tampilkan pesannya agar mudah di-debug
     return new Response(`Internal Server Error: ${err.message}`, { 
       status: 500,
       headers: { "Content-Type": "text/plain; charset=utf-8" }
