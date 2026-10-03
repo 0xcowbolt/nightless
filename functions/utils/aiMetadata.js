@@ -1,19 +1,11 @@
-// Fungsi helper untuk mengambil sampel acak aman dari array besar
+import { sanitizeText } from './parser.js';
+
+// Ambil sampel acak aman dari array besar (jutaan brand)
 function getRandomSample(arr, maxItems = 50) {
   if (!arr || arr.length === 0) return [];
   if (arr.length <= maxItems) return arr;
   const shuffled = [...arr].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, maxItems);
-}
-
-// Fungsi sanitasi teks (bisa diimpor atau dideklarasikan mandiri)
-function sanitizeText(str) {
-  if (!str) return '';
-  return str
-    .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
 }
 
 export async function handleAiMetadata(requestPath, baseHost, urlOrigin) {
@@ -22,7 +14,7 @@ export async function handleAiMetadata(requestPath, baseHost, urlOrigin) {
   }
   baseHost = baseHost.replace(/\/+$/, '');
 
-  // 1. Ambil daftar brand dari brands.txt secara dinamis
+  // Ambil daftar brand secara dinamis dari brands.txt
   let brandsList = [];
   try {
     const txtRes = await fetch(`${urlOrigin}/brands.txt`);
@@ -39,7 +31,7 @@ export async function handleAiMetadata(requestPath, baseHost, urlOrigin) {
   const hostOnly = baseHost.replace(/^https?:\/\//i, '');
   const sampleBrands = getRandomSample(brandsList, 50);
 
-  // 2. Handle /llms.txt di Root
+  // 1. Handle /llms.txt
   if (requestPath.includes("llms.txt")) {
     let output = `# Direktori Resmi & Pusat Layanan Digital\n\n`;
     output += `> Pusat direktori tautan resmi, informasi unduhan aplikasi, dan layanan terintegrasi.\n\n`;
@@ -57,7 +49,7 @@ export async function handleAiMetadata(requestPath, baseHost, urlOrigin) {
     return { content: output, contentType: "text/plain; charset=utf-8" };
   }
 
-  // 3. Handle /ai-catalog.json di Root
+  // 2. Handle /ai-catalog.json
   if (requestPath.includes("ai-catalog.json")) {
     const entries = sampleBrands.map((b, index) => {
       const cleanB = sanitizeText(b);
