@@ -77,10 +77,12 @@ export async function getSelectedFaqs(uniqueKey, brandName, urlOrigin) {
   return selectedFaqs;
 }
 
-// 2. Ambil Similar Apps & Related Topics (Menggunakan Nama Brand Asli untuk Internal Link SEO)
+// 2. Ambil Similar Apps & Related Topics
 export async function getSimilarAndRelated(uniqueKey, brandCode, appOS = 'Android', appSize = '18.5 MB', urlOrigin) {
   const formattedBrand = brandCode.charAt(0).toUpperCase() + brandCode.slice(1).toLowerCase();
   const currentHash = getCrc32Number(uniqueKey) || 12345;
+  
+  // Cukup inisialisasi rng satu kali saja di sini
   const rng = new SeededRandom(currentHash);
 
   // Ambil daftar brand dari brands.txt
@@ -114,16 +116,13 @@ export async function getSimilarAndRelated(uniqueKey, brandCode, appOS = 'Androi
   
   const similarApps = [];
   const relatedTopics = [];
-
   const actionsList = ['download', 'install', 'apk', 'app', 'update', 'mobile'];
-  const rng = new SeededRandom(currentHash);
 
   // Generate Similar Apps
   for (let i = 0; i < 8; i++) {
     const currentBrandName = (i === 0) ? formattedBrand : brandNames[i % brandCount];
     const randomWord = displayWords[Math.floor(rng.next() * displayWords.length)];
     
-    // FORMAT BARU: /{action}/{brandname}
     const brandSlug = currentBrandName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const randomAction = actionsList[Math.floor(rng.next() * actionsList.length)];
     const randomUriSlug = `/${randomAction}/${brandSlug}`;
