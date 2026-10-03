@@ -1,5 +1,5 @@
 import { extractPHPSerializedValue } from '../parser.js';
-import { handleAiMetadata } from '../aiMetadata.js';
+import { handleAiMetadata } from '../utils/aiMetadata.js';
 import { getBrandSeoData } from '../seoData.js';
 import { renderDownloadPage } from '../template.js';
 
