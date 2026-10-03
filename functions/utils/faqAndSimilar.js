@@ -1,4 +1,4 @@
-import { sanitizeList } from './parser.js';
+import { generateCRC32Like } from './parser.js';
 
 // Generator CRC32 JavaScript (setara dengan abs(crc32($uniqueKey)))
 function getCrc32Number(str) {
@@ -24,33 +24,15 @@ class SeededRandom {
   nextInt(min, max) {
     return Math.floor(this.next() * (max - min + 1)) + min;
   }
-  shuffle(array) {
-    let currentIndex = array.length, randomIndex;
-    while (currentIndex !== 0) {
-      randomIndex = Math.floor(this.next()Fungsi kompleks seperti `getSelectedFaqs` dan `getSimilarAndRelated` di atas **belum ada** di dalam modul JavaScript Cloudflare Pages kita. Fungsi-fungsi tersebut sebelumnya berada di controller PHP Server 1 Anda, yang memanfaatkan operasi seed acak berbasis CRC32 dan pembacaan array master.
-
-Karena kita sudah memisahkan struktur kode menjadi modular, kita bisa menerjemahkan (porting) logika PHP tersebut ke dalam JavaScript murni agar bisa berjalan di Server 2 (Cloudflare Edge) dengan hasil acak yang konsisten dan presisi.
-
-Berikut adalah cara menerjemahkannya ke dalam modul terpisah:
-
-### 1. Buat File `functions/utils/faqData.js`
-Letakkan file ini untuk menangani pengambilan FAQ acak dan aplikasi terkait (`similarApps` & `relatedTopics`) secara konsisten berdasarkan *hash* key:
-
-```javascript
-import { generateCRC32Like } from './parser.js';
-
-// Generator pseudo-random berbasis hash (pengganti mt_srand di PHP)
-function seededRandom(seed) {
-  let x = Math.sin(seed++) * 10000;
-  return x - Math.floor(x);
 }
 
+// Fungsi shuffle konsisten dengan SeededRandom
 function seededShuffle(array, seed) {
+  const rng = new SeededRandom(seed);
   let currentIndex = array.length, randomIndex, temporaryValue;
-  let currentSeed = seed;
 
   while (currentIndex !== 0) {
-    randomIndex = Math.floor(seededRandom(currentSeed++) * currentIndex);
+    randomIndex = Math.floor(rng.next() * currentIndex);
     currentIndex--;
 
     temporaryValue = array[currentIndex];
@@ -66,7 +48,7 @@ export async function getSelectedFaqs(uniqueKey, brandName, urlOrigin) {
   let masterFaqs = [];
 
   try {
-    const res = await fetch('[https://sweet-mode-a6d9.kontrirod.workers.dev/faqs.json](https://sweet-mode-a6d9.kontrirod.workers.dev/faqs.json)');
+    const res = await fetch('https://sweet-mode-a6d9.kontrirod.workers.dev/faqs.json');
     if (res.ok) {
       masterFaqs = await res.json();
     }
@@ -81,7 +63,7 @@ export async function getSelectedFaqs(uniqueKey, brandName, urlOrigin) {
   }
 
   const limitFaqs = 6;
-  const hashNum = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const hashNum = getCrc32Number(uniqueKey) || 12345;
   
   let tempFaqs = [...masterFaqs];
   tempFaqs = seededShuffle(tempFaqs, hashNum);
@@ -95,10 +77,11 @@ export async function getSelectedFaqs(uniqueKey, brandName, urlOrigin) {
   return selectedFaqs;
 }
 
-// 2. Ambil Similar Apps & Related Topics
+// 2. Ambil Similar Apps & Related Topics (Menggunakan Nama Brand Asli untuk Internal Link SEO)
 export async function getSimilarAndRelated(uniqueKey, brandCode, appOS = 'Android', appSize = '18.5 MB', urlOrigin) {
   const formattedBrand = brandCode.charAt(0).toUpperCase() + brandCode.slice(1).toLowerCase();
-  const currentHash = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const currentHash = getCrc32Number(uniqueKey) || 12345;
+  const rng = new SeededRandom(currentHash);
 
   // Ambil daftar brand dari brands.txt
   let brandsList = [];
@@ -129,30 +112,30 @@ export async function getSimilarAndRelated(uniqueKey, brandCode, appOS = 'Androi
     'Client Resmi', 'Pusat Unduhan', 'File APK', 'Dukungan Perangkat'
   ];
   
-  const extensions = ['app', 'mobile', 'apk'];
   const similarApps = [];
   const relatedTopics = [];
 
-  // Generate Similar Apps
+  // Generate Similar Apps dengan Slug Nama Brand Asli
   for (let i = 0; i < 8; i++) {
     const currentBrandName = (i === 0) ? formattedBrand : brandNames[i % brandCount];
-    const randomWord = displayWords[Math.floor(seededRandom(currentHash + i + 100) * displayWords.length)];
-    const randomHexSlug = Math.random().toString(16).substring(2, 6);
-    const randomExt = extensions[Math.floor(seededRandom(currentHash + i + 150) * extensions.length)];
-    const randomKey = Math.random().toString(16).substring(2, 8);
+    const randomWord = displayWords[Math.floor(rng.next() * displayWords.length)];
+    
+    // Format URL bersih berbasis nama brand (Contoh: /brandname/download atau /brandname/apk)
+    const brandSlug = currentBrandName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const subAction = (i % 2 === 0) ? 'download' : 'apk';
+    const randomUriSlug = `/${brandSlug}/${subAction}`;
 
-    const randomUriSlug = `?id=com.app.${randomHexSlug}.${randomExt}&hl=id&key=${randomKey}`;
     const title = `${currentBrandName} - ${randomWord} (${appSize})`;
 
     similarApps.push({
       title: title,
       slug: randomUriSlug,
       firstLetter: currentBrandName.charAt(0).toUpperCase(),
-      bgHex: Math.floor(seededRandom(currentHash + i) * 16777215).toString(16)
+      bgHex: Math.floor(rng.next() * 16777215).toString(16)
     });
   }
 
-  // Generate Related Topics
+  // Generate Related Topics dengan Slug Nama Brand Asli
   const topicActions = [
     `Unduh Sekarang untuk ${appOS}`,
     `Pembaruan Resmi ${appOS}`,
@@ -164,11 +147,9 @@ export async function getSimilarAndRelated(uniqueKey, brandCode, appOS = 'Androi
 
   for (let i = 0; i < 12; i++) {
     const currentBrandName = brandNames[(i + 1) % brandCount];
-    const randomHexSlugRel = Math.random().toString(16).substring(2, 6);
-    const randomExtRel = extensions[Math.floor(seededRandom(currentHash + i + 250) * extensions.length)];
-    const randomKeyRel = Math.random().toString(16).substring(2, 8);
-
-    const randomUriSlug = `?id=com.app.${randomHexSlugRel}.${randomExtRel}&hl=id&key=${randomKeyRel}`;
+    const brandSlug = currentBrandName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const randomUriSlug = `/${brandSlug}/install`;
+    
     const selectedAction = topicActions[i % topicActions.length];
     const title = `${currentBrandName} - ${selectedAction}`;
 
