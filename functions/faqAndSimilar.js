@@ -115,46 +115,43 @@ export async function getSimilarAndRelated(uniqueKey, brandCode, appOS = 'Androi
   const similarApps = [];
   const relatedTopics = [];
 
-  // Generate Similar Apps dengan Slug Nama Brand Asli
+  const actionsList = ['download', 'install', 'apk', 'app', 'update', 'mobile'];
+  const rng = new SeededRandom(currentHash);
+
+  // Generate Similar Apps
   for (let i = 0; i < 8; i++) {
     const currentBrandName = (i === 0) ? formattedBrand : brandNames[i % brandCount];
     const randomWord = displayWords[Math.floor(rng.next() * displayWords.length)];
     
-    // Format URL bersih berbasis nama brand (Contoh: /brandname/download atau /brandname/apk)
+    // FORMAT BARU: /{action}/{brandname}
     const brandSlug = currentBrandName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const subAction = (i % 2 === 0) ? 'download' : 'apk';
-    const randomUriSlug = `/${brandSlug}/${subAction}`;
-
-    const title = `${currentBrandName} - ${randomWord} (${appSize})`;
+    const randomAction = actionsList[Math.floor(rng.next() * actionsList.length)];
+    const randomUriSlug = `/${randomAction}/${brandSlug}`;
 
     similarApps.push({
-      title: title,
+      title: `${currentBrandName} - ${randomWord} (${appSize})`,
       slug: randomUriSlug,
       firstLetter: currentBrandName.charAt(0).toUpperCase(),
       bgHex: Math.floor(rng.next() * 16777215).toString(16)
     });
   }
 
-  // Generate Related Topics dengan Slug Nama Brand Asli
+  // Generate Related Topics
   const topicActions = [
     `Unduh Sekarang untuk ${appOS}`,
     `Pembaruan Resmi ${appOS}`,
     `File Instalasi Terverifikasi`,
-    `Panduan Download Aman`,
-    `Akses Unduh Cepat`,
-    `Versi Terbaru ${appOS}`
+    `Panduan Download Aman`
   ];
 
   for (let i = 0; i < 12; i++) {
     const currentBrandName = brandNames[(i + 1) % brandCount];
     const brandSlug = currentBrandName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const randomUriSlug = `/${brandSlug}/install`;
-    
-    const selectedAction = topicActions[i % topicActions.length];
-    const title = `${currentBrandName} - ${selectedAction}`;
+    const randomAction = actionsList[Math.floor(rng.next() * actionsList.length)];
+    const randomUriSlug = `/${randomAction}/${brandSlug}`;
 
     relatedTopics.push({
-      title: title,
+      title: `${currentBrandName} - ${topicActions[i % topicActions.length]}`,
       slug: randomUriSlug
     });
   }
