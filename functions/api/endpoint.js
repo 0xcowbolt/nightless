@@ -11,7 +11,6 @@ export async function onRequest(context) {
   let httpHost = 'spin8vip.top';
   let uriFilePost = '';
   let rawPostData = {};
-  let debugPostArray = null; // Variabel untuk menampung hasil debug
 
   if (request.method === 'POST') {
     try {
@@ -26,55 +25,38 @@ export async function onRequest(context) {
 
       if (rawPostData.x) {
         const serializedData = rawPostData.x;
-        
-        // Ekstraksi nilai untuk melihat isi data yang dikirim dari PHP
         const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
         const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
         let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
         const rawUriName = extractPHPSerializedValue(serializedData, 'uri_name');
 
-        // [FITUR DEBUG] Simpan struktur array yang berhasil diekstrak ala print_r
-        debugPostArray = {
-          "STATUS": "SUCCESS_DECODE_POST_X",
-          "REQUEST_URI": uriFromPost || null,
-          "QUERY_STRING": queryFromPost || null,
-          "HTTP_HOST": hostFromPost || null,
-          "uri_name": rawUriName || null,
-          "RAW_SERIALIZED_STRING": serializedData
-        };
-
         if (uriFromPost) requestURI = uriFromPost;
         if (queryFromPost) queryString = queryFromPost;
         if (hostFromPost) httpHost = hostFromPost;
         
+        // Bersihkan uri_name: Ambil persis sampai .php, abaikan / atau ? setelahnya
         if (rawUriName) {
           const matchPhp = rawUriName.match(/^(\/[^\?]+\.php)/);
-          uriFilePost = matchPhp ? matchPhp[1] : '';
+          if (matchPhp) {
+            uriFilePost = matchPhp[1]; // Hasil: /aby.php
+          } else {
+            const phpIndex = rawUriName.indexOf('.php');
+            if (phpIndex !== -1) {
+              uriFilePost = rawUriName.substring(0, phpIndex + 4);
+            }
+          }
         }
-      } else {
-        debugPostArray = { "ERROR": "Key 'x' tidak ditemukan di dalam payload POST." };
       }
-    } catch (err) {
-      debugPostArray = { "ERROR_EXCEPTION": err.message };
-    }
-
-    // [DEBUG MODE] Jika ingin mencetak array ke layar, aktifkan kode di bawah ini.
-    // Jika Anda ingin mengembalikan ke mode normal (render HTML), cukup beri komentar/hapus blok if ini.
-    if (debugPostArray) {
-      return new Response(`Array\n(\n${JSON.stringify(debugPostArray, null, 2)}\n)`, {
-        status: 200,
-        headers: { "Content-Type": "text/plain; charset=utf-8" }
-      });
-    }
+    } catch (e) {}
   } else {
     return new Response("Method not allowed. Use POST.", { status: 405 });
   }
 
-  // --- LANJUTAN KODE RENDER HTML NORMAL DI BAWAH ---
   if (!httpHost) httpHost = url.host || 'spin8vip.top';
   const pubHost = httpHost;
   const publicPathUri = `https://${pubHost}${uriFilePost}`;
 
+  // Parsing Brand Query Universal
   let cleanPath = requestURI.replace(/^\/+/, '');
   let brandQuery = '';
 
