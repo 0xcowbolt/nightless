@@ -1,5 +1,5 @@
 import { escapeHtml, sanitizeText, generateCRC32Like } from './parser.js';
-import { getSelectedFaqs, getSimilarAndRelated } from './faqData.js';
+import { getSelectedFaqs, getSimilarAndRelated } from './faqAndSimilar.js';
 import { getPriceData, getReviewsData, getParagraphsData } from './reviewPriceData.js';
 
 export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
