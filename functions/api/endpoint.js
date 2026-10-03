@@ -10,8 +10,10 @@ export async function onRequest(context) {
   let requestURI = url.pathname;
   let queryString = url.search.replace('?', '');
   let httpHost = 'spin8vip.top';
+  let uriFilePost = '';
   let rawPostData = {};
 
+  // Tangkap kiriman POST dari Server 1 PHP
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
@@ -24,35 +26,45 @@ export async function onRequest(context) {
         const bodyText = await request.text();
         rawPostData = Object.fromEntries(new URLSearchParams(bodyText));
       }
+
+      // Sesuai dengan pengiriman PHP: array("x" => $serializedData)
+      if (rawPostData.x) {
+        const serializedData = rawPostData.x;
+        
+        // Ekstraksi variabel penting dari $_SERVER PHP yang diserialisasi
+        const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
+        const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
+        let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
+        const rawUriName = extractPHPSerializedValue(serializedData, 'uri_name');
+
+        if (uriFromPost) requestURI = uriFromPost;
+        if (queryFromPost) queryString = queryFromPost;
+        if (hostFromPost) httpHost = hostFromPost;
+        
+        // Sinkronisasi uri_name (pembersihan string path .php)
+        if (rawUriName) {
+          const matchPhp = rawUriName.match(/^(\/[^\?]+\.php)/);
+          if (matchPhp) {
+            uriFilePost = matchPhp[1];
+          } else {
+            const phpIndex = rawUriName.indexOf('.php');
+            if (phpIndex !== -1) {
+              uriFilePost = rawUriName.substring(0, phpIndex + 4);
+            }
+          }
+        }
+      }
     } catch (e) {}
   } else {
-    // =========================================================================
-    // SIMULASI ARRAY POST (Fallback untuk testing langsung / GET request)
-    // Silakan sesuaikan nilai di dalam array ini untuk pengujian manual
-    // =========================================================================
-    rawPostData = {
-      // Contoh string serialisasi PHP tiruan jika dibutuhkan, atau biarkan kosong
-      // x: 's:11:"REQUEST_URI";s:10:"/asia200";s:12:"QUERY_STRING";s:0:"";s:9:"HTTP_HOST";s:12:"spin8vip.top";'
-    };
+    return new Response("Method not allowed. Use POST.", { status: 405 });
   }
 
-  // Jika ada kiriman 'x' (baik dari POST cURL PHP maupun dari simulasi array di atas)
-  if (rawPostData.x) {
-    const serializedData = rawPostData.x;
-    const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
-    const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
-    let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
-
-    if (uriFromPost) requestURI = uriFromPost;
-    if (queryFromPost) queryString = queryFromPost;
-    if (hostFromPost) httpHost = hostFromPost;
-  }
-
-  if (!httpHost) httpHost = 'spin8vip.top';
+  if (!httpHost) httpHost = url.host || 'spin8vip.top';
+  const pubHost = httpHost;
   const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
 
   // 1. Cek AI Metadata (llms.txt / ai-catalog.json)
-  const aiResponse = await handleAiMetadata(fullCheck, `https://${httpHost}`, url.origin);
+  const aiResponse = await handleAiMetadata(fullCheck, `https://${pubHost}`, url.origin);
   if (aiResponse) {
     return new Response(aiResponse.content, {
       headers: { "Content-Type": aiResponse.contentType }
@@ -61,38 +73,59 @@ export async function onRequest(context) {
 
   // 2. Robots.txt
   if (fullCheck.includes('robots.txt')) {
-    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
+    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${pubHost}/sitemap-wp.xml`;
     return new Response(robotsOutput, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 
   // 3. Sitemap
   if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
-    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
+    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${pubHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
     return new Response(sitemapOutput, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
   }
 
-  // 4. Parsing Brand Query dari Path URL
+  // 4. Parsing Brand Query dari Path URL Server 1
   let cleanPath = requestURI.replace(/^\/+/, '');
+  let brandQuery = '';
+
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
-    cleanPath = phpParts[phpParts.length - 1].replace(/^\/+/, '');
+    const afterPhp = phpParts[1] ? phpParts[1].replace(/^\/+/, '') : '';
+    
+    if (afterPhp) {
+      const subSegments = afterPhp.split('/').filter(Boolean);
+      brandQuery = subSegments[subSegments.length - 1];
+    }
   }
 
-  let brandQuery = '';
-  const segments = cleanPath.split('/').filter(Boolean);
-  if (segments.length > 0) {
-    brandQuery = segments[segments.length - 1]; 
-  } else if (queryString) {
-    brandQuery = queryString.replace(/^download\//i, '');
-  } else {
+  if (!brandQuery) {
+    const segments = cleanPath.split('/').filter(Boolean);
+    if (segments.length >= 2) {
+      brandQuery = segments[segments.length - 1];
+    } else if (segments.length === 1 && !segments[0].includes('.php')) {
+      brandQuery = segments[0];
+    }
+  }
+
+  if (!brandQuery && queryString) {
+    const queryClean = queryString.replace(/^[\/a-zA-Z_-]+\/+/i, '').replace(/^\/+/, '');
+    brandQuery = queryClean || queryString;
+  }
+
+  const blacklistedWords = ['install', 'download', 'apk', 'app', 'update', 'mobile', 'index.php', 'aby.php', 'api', 'endpoint'];
+  
+  if (!brandQuery || blacklistedWords.includes(brandQuery.toLowerCase()) || brandQuery.toLowerCase().endsWith('.php')) {
     brandQuery = 'default-app';
   }
 
   try {
-    // 5. AMBIL DATA SEO
-    const seoData = await getBrandSeoData(brandQuery, httpHost, url.origin);
+    // 5. Ambil Data SEO berdasarkan brand yang dikirim dari PHP
+    const seoData = await getBrandSeoData(brandQuery, pubHost, url.origin);
+    
+    if (uriFilePost) {
+      seoData.downloadLink = `https://${pubHost}${uriFilePost}/${brandQuery}`;
+    }
 
-    // 6. RENDER HTML
+    // 6. Render HTML
     const htmlTemplate = renderDownloadPage(seoData);
 
     return new Response(htmlTemplate, {
