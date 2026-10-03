@@ -230,3 +230,113 @@ export function getKeywordData(uniqueKey, brandName, pubHost = '') {
 
   return processedArray.join(', ');
 }
+
+export function getBrandDetailsData(uniqueKey, whitelistData = {}, randomData = [], seoBrandName = 'DefaultBrand') {
+  const uriHash = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const rng = new SeededRandom(uriHash);
+
+  let currentBrand = null;
+  let brandName = '';
+
+  if (whitelistData && typeof whitelistData === 'object' && whitelistData[uniqueKey]) {
+    currentBrand = whitelistData[uniqueKey];
+    brandName = currentBrand['name'] ? currentBrand['name'] : seoBrandName;
+  } else {
+    if (randomData && Array.isArray(randomData) && randomData.length > 0) {
+      const randomIndex = rng.rand(0, randomData.length - 1);
+      const randomPick = randomData[randomIndex];
+
+      brandName = randomPick['name'] ? randomPick['name'] : seoBrandName;
+      currentBrand = {
+        version: randomPick['version'] || '1.0.0',
+        fileSize: randomPick['fileSize'] || '15 MB',
+        androidOS: randomPick['androidOS'] || 'Android 8.0+',
+        unduhan: randomPick['unduhan'] || '100,000+',
+        bahasa: randomPick['bahasa'] || 'Indonesia',
+        Diperbarui: randomPick['Diperbarui'] || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+        sha: randomPick['sha'] || 'SHA256: ' + generateCRC32Like(uniqueKey)
+      };
+    } else {
+      brandName = seoBrandName;
+      
+      // Format tanggal mundur acak
+      const daysAgo = rng.rand(1, 30);
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() - daysAgo);
+      const formattedDateString = targetDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+      currentBrand = {
+        version: `${rng.rand(1, 10)}.${rng.rand(0, 9)}.${rng.rand(10, 999)}`,
+        fileSize: `${rng.rand(10, 500)}.${rng.rand(1, 9)} MB`,
+        androidOS: `Android ${rng.rand(5, 12)}.0+`,
+        unduhan: `${(rng.rand(50, 5000) * 1000).toLocaleString('id-ID')}+`,
+        bahasa: `Indonesia (${rng.rand(1, 52)} lainnya)`,
+        Diperbarui: formattedDateString,
+        sha: 'SHA256: ' + generateCRC32Like(uniqueKey + rng.rand())
+      };
+    }
+  }
+
+  const appVersion = currentBrand['version'];
+  const appSize = currentBrand['fileSize'];
+  const appOS = currentBrand['androidOS'];
+  const appDownloads = currentBrand['unduhan'];
+  const appBahasa = currentBrand['bahasa'];
+  const displayDate = currentBrand['Diperbarui'];
+  const appSha = currentBrand['sha'];
+  
+  // Format tanggal ISO (Y-m-d\TH:i:sP)
+  const parsedDateObj = new Date(displayDate);
+  const appDate = !isNaN(parsedDateObj) ? parsedDateObj.toISOString() : new Date().toISOString();
+
+  const hurufPertama = brandName ? brandName.charAt(0).toUpperCase() : 'A';
+  const imageUrl = `https://dummyimage.com/240x240/007a99/ffffff.png&text=${hurufPertama}`;
+
+  const appRating = (rng.rand(38, 49) / 10).toFixed(1);
+  const appReviewCount = rng.rand(1000, 99999);
+
+  return {
+    brandName,
+    appVersion,
+    appSize,
+    appOS,
+    appDownloads,
+    appBahasa,
+    displayDate,
+    appSha,
+    appDate,
+    imageUrl,
+    appRating,
+    appReviewCount
+  };
+}
+
+// 8. Get Category Data
+export function getCategoryData(uniqueKey) {
+  const categories = ['Pendidikan', 'Petualangan', 'Kasual', 'Game', 'Alat', 'Produktivitas', 'GameApplication', 'Strategi', 'Kartu', 'Multiplayer'];
+  const uriHash = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const rng = new SeededRandom(uriHash);
+
+  const categoryIndex = rng.rand(0, categories.length - 1);
+  return categories[categoryIndex];
+}
+
+// 9. Get Image URL Data
+export function getImageUrlData(brandName) {
+  const hurufPertama = brandName ? brandName.charAt(0).toUpperCase() : 'A';
+  return `https://dummyimage.com/240x240/007a99/ffffff.png&text=${hurufPertama}`;
+}
+
+// 10. Get Background Colors Data
+export function getBackgroundColorsData(uniqueKey) {
+  const bgColors = ['007a99', '1a1a1a', '7a0000', '004d1a', '4d004d', '996600'];
+  const hashNum = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const count = bgColors.length;
+
+  return {
+    bg1: bgColors[hashNum % count],
+    bg2: bgColors[(hashNum >> 1) % count],
+    bg3: bgColors[(hashNum >> 2) % count],
+    bg4: bgColors[(hashNum >> 3) % count]
+  };
+}
