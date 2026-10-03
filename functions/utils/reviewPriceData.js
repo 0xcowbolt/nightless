@@ -1,0 +1,145 @@
+import { generateCRC32Like } from './parser.js';
+
+// Generator pseudo-random berbasis seed (Pengganti mt_srand & mt_rand di PHP)
+class SeededRandom {
+  constructor(seed) {
+    this.seed = Math.abs(seed) % 2147483647;
+    if (this.seed <= 0) this.seed += 2147483646;
+  }
+  next() {
+    this.seed = (this.seed * 16807) % 2147483647;
+    return (this.seed - 1) / 2147483646;
+  }
+  rand(min, max) {
+    return Math.floor(this.next() * (max - min + 1)) + min;
+  }
+}
+
+// 1. Get Price Data
+export function getPriceData(uniqueKey) {
+  const uriHash = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const rng = new SeededRandom(uriHash);
+
+  const isFree = rng.rand(1, 10) > 8;
+  let appPrice = "0";
+
+  if (!isFree) {
+    const randomMultiplier = rng.rand(3, 50);
+    appPrice = String(randomMultiplier * 5000);
+  }
+
+  return {
+    appPrice,
+    priceCurrency: "IDR",
+    isFree
+  };
+}
+
+// 2. Get Reviews Data
+export async function getReviewsData(uniqueKey, brandName, appOS = 'Android', appSize = '15 MB') {
+  const formattedBrand = brandName.charAt(0).toUpperCase() + brandName.slice(1).toLowerCase();
+  
+  let names = [];
+  let commentTemplates = [];
+
+  try {
+    const [namesRes, commentsRes] = await Promise.all([
+      fetch('https://sweet-mode-a6d9.kontrirod.workers.dev/names.json'),
+      fetch('https://sweet-mode-a6d9.kontrirod.workers.dev/comments.json')
+    ]);
+
+    if (namesRes.ok) names = await namesRes.json();
+    if (commentsRes.ok) commentTemplates = await commentsRes.json();
+  } catch (e) {}
+
+  if (!names.length) names = ["Budi Santoso", "Siti Rahma", "Ahmad Fauzi", "Dewi Lestari"];
+  if (!commentTemplates.length) commentTemplates = ["Aplikasi {brand} sangat membantu dan proses unduhnya cepat untuk {os} ({size})."];
+
+  const baseHash = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const brandHash = parseInt(generateCRC32Like(brandName), 16) || 54321;
+  const pageSeed = baseHash + brandHash;
+
+  const rng = new SeededRandom(pageSeed);
+  const totalReviews = rng.rand(5, 7);
+
+  const reviews = [];
+  const reviewSchemas = [];
+
+  for (let i = 0; i < totalReviews; i++) {
+    const starsCount = rng.rand(4, 5);
+    const templateIndex = rng.rand(0, commentTemplates.length - 1);
+    const randomTemplate = commentTemplates[templateIndex] || commentTemplates[0];
+
+    const commentText = randomTemplate
+      .replace(/\{brand\}/g, formattedBrand)
+      .replace(/\{os\}/g, appOS)
+      .replace(/\{size\}/g, appSize);
+
+    const nameIndex = rng.rand(0, names.length - 1);
+    const reviewerName = names[nameIndex] || "Pengguna Setia";
+    const timeAgo = rng.rand(1, 6) + ' hari yang lalu';
+    const avatarRand = rng.rand(1, 70);
+
+    reviews.push({
+      name: reviewerName,
+      avatar: avatarRand,
+      time: timeAgo,
+      stars: '★'.repeat(starsCount) + '☆'.repeat(5 - starsCount),
+      comment: commentText
+    });
+
+    reviewSchemas.push({
+      "@type": "Review",
+      "reviewRating": {
+        "@type": "Rating",
+        "ratingValue": String(starsCount)
+      },
+      "author": {
+        "@type": "Person",
+        "name": reviewerName
+      },
+      "reviewBody": commentText
+    });
+  }
+
+  return { reviews, reviewSchemas };
+}
+
+// 3. Get Paragraphs Data
+export async function getParagraphsData(uniqueKey, brandName = '') {
+  let masterParagraphs = [];
+
+  try {
+    const res = await fetch('https://sweet-mode-a6d9.kontrirod.workers.dev/paragraphs.json');
+    if (res.ok) masterParagraphs = await res.json();
+  } catch (e) {}
+
+  if (!masterParagraphs.length) {
+    masterParagraphs = [
+      "{brand} adalah platform digital terkemuka yang menyediakan akses layanan dan unduhan aplikasi resmi secara cepat.",
+      "Nikmati kenyamanan dan keamanan penuh saat menggunakan layanan dari {brand} di perangkat Anda."
+    ];
+  }
+
+  const limitParagraphs = 5;
+  
+  // Memetakan array dengan kunci hash crc32 setara array_multisort di PHP
+  let tempParagraphs = masterParagraphs.map((paragraph, index) => {
+    const sortKey = parseInt(generateCRC32Like(`${index}_${uniqueKey}`), 16) || index;
+    return { paragraph, sortKey };
+  });
+
+  tempParagraphs.sort((a, b) => a.sortKey - b.sortKey);
+
+  const rawSelected = tempParagraphs.slice(0, limitParagraphs);
+  const selectedParagraphs = rawSelected.map(item => {
+    let pText = item.paragraph;
+    if (brandName) {
+      const formattedBrand = brandName.charAt(0).toUpperCase() + brandName.slice(1).toLowerCase();
+      pText = pText.replace(/\{brand\}/g, formattedBrand);
+    }
+    return pText;
+  });
+
+  return selectedParagraphs;
+}
