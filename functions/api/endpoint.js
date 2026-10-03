@@ -12,7 +12,6 @@ export async function onRequest(context) {
   let httpHost = 'spin8vip.top';
   let rawPostData = {};
 
-  // 1. Tangkap POST dari Server 1
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
@@ -40,10 +39,9 @@ export async function onRequest(context) {
   }
 
   if (!httpHost) httpHost = 'spin8vip.top';
-
   const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
 
-  // 2. Cek AI Metadata (llms.txt / ai-catalog.json)
+  // 1. Cek AI Metadata (llms.txt / ai-catalog.json)
   const aiResponse = await handleAiMetadata(fullCheck, `https://${httpHost}`, url.origin);
   if (aiResponse) {
     return new Response(aiResponse.content, {
@@ -51,19 +49,19 @@ export async function onRequest(context) {
     });
   }
 
-  // 3. Handle Robots.txt
+  // 2. Robots.txt
   if (fullCheck.includes('robots.txt')) {
     const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
     return new Response(robotsOutput, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 
-  // 4. Handle Sitemap
+  // 3. Sitemap
   if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
     const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
     return new Response(sitemapOutput, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
   }
 
-  // 5. Parsing Path & Abaikan .php untuk Halaman Brand
+  // 4. Parsing Brand Query dari Path URL
   let cleanPath = requestURI.replace(/^\/+/, '');
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
@@ -73,23 +71,31 @@ export async function onRequest(context) {
   let brandQuery = '';
   const segments = cleanPath.split('/').filter(Boolean);
   if (segments.length > 0) {
-    brandQuery = segments[0];
+    brandQuery = segments[segments.length - 1]; // Ambil segmen terakhir sebagai brand jika berupa /brand/download
   } else if (queryString) {
     brandQuery = queryString.replace(/^download\//i, '');
   } else {
     brandQuery = 'default-app';
   }
 
-  // 6. Ambil Semua Data SEO & Variabel Brand dari Modul Terpisah
-  const seoData = getBrandSeoData(brandQuery, httpHost);
+  try {
+    // 5. AMBIL DATA SEO (WAJIB MENGGUNAKAN AWAIT)
+    const seoData = await getBrandSeoData(brandQuery, httpHost, url.origin);
 
-  // 7. Render HTML Menggunakan Data Terstruktur
-  const htmlTemplate = renderDownloadPage(seoData);
+    // 6. RENDER HTML
+    const htmlTemplate = renderDownloadPage(seoData);
 
-  return new Response(htmlTemplate, {
-    headers: { 
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "public, max-age=600"
-    }
-  });
+    return new Response(htmlTemplate, {
+      headers: { 
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "public, max-age=600"
+      }
+    });
+  } catch (err) {
+    // Jika terjadi error 500, tampilkan pesannya agar mudah di-debug
+    return new Response(`Internal Server Error: ${err.message}`, { 
+      status: 500,
+      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    });
+  }
 }
