@@ -31,10 +31,8 @@ export function renderDownloadPage(data) {
   const currentYear = new Date().getFullYear();
   const formattedBrand = brandCode.charAt(0).toUpperCase() + brandCode.slice(1).toLowerCase();
   
-  // Format JSON-LD untuk Review Schema
   const reviewSchemasJson = JSON.stringify(reviewSchemas, null, 2);
 
-  // Format HTML untuk FAQ Schema
   const faqSchemaItems = (faqs || []).map(faq => {
     const qText = (faq.q || '').replace(/\{brand\}/g, formattedBrand);
     const aText = (faq.a || '').replace(/\{brand\}/g, formattedBrand);
@@ -142,8 +140,8 @@ export function renderDownloadPage(data) {
       "image": "${imageUrl}",
       "offers": {
         "@type": "Offer",
-        "price": "${priceData.appPrice}",
-        "priceCurrency": "${priceData.priceCurrency}",
+        "price": "${priceData.appPrice || '0'}",
+        "priceCurrency": "${priceData.priceCurrency || 'Rp'}",
         "availability": "https://schema.org/InStock"
       },
       "aggregateRating": {
@@ -283,9 +281,9 @@ export function renderDownloadPage(data) {
                             </div>
                         
                             <div class="price-row" style="margin: 8px 0; font-weight: bold;">
-                                ${priceData.appPrice === "0" 
+                                ${(priceData.appPrice || '0') === "0" 
                                     ? '<span style="color: #ffffff; background: #c0392b; padding: 3px 8px; border-radius: 4px;">Gratis</span>' 
-                                    : `<span style="color: #a93226;">${priceData.priceCurrency}${Number(priceData.appPrice).toLocaleString('id-ID')}</span>`
+                                    : `<span style="color: #a93226;">${priceData.priceCurrency \vert{}\vert{} 'Rp'}${Number(priceData.appPrice).toLocaleString('id-ID')}</span>`
                                 }
                             </div>
                         
@@ -336,7 +334,7 @@ export function renderDownloadPage(data) {
                         <div class="review">
                             <div class="rev-header">
                                 <div class="rev-user">
-                                    <img src="https://i.pravatar.cc/150?img=${review.avatar}" class="rev-avatar" alt="Avatar" width="32" height="32" loading="lazy"> 
+                                    <img src="https://i.pravatar.cc/150?img=${review.avatar || 1}" class="rev-avatar" alt="Avatar" width="32" height="32" loading="lazy"> 
                                     ${review.name}
                                 </div>
                                 <div class="stars">${review.stars}</div>
@@ -352,7 +350,7 @@ export function renderDownloadPage(data) {
                     <div class="similar-grid">
                          ${(similarApps || []).map(item => `
                             <a href="${item.slug}" class="sim-app">
-                                <img src="https://dummyimage.com/144x144/${item.bgHex}/fff.png&text=${item.firstLetter}" class="sim-icon" alt="Icon" width="72" height="72" loading="lazy">
+                                <img src="https://dummyimage.com/144x144/${item.bgHex \vert{}\vert{} '007a99'}/fff.png&text=${item.firstLetter || 'A'}" class="sim-icon" alt="Icon" width="72" height="72" loading="lazy">
                                 <div class="sim-title">${item.title}</div>
                             </a>
                         `).join('')}
