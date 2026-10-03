@@ -1,18 +1,27 @@
 import { escapeHtml, sanitizeText, generateCRC32Like } from './parser.js';
 import { getSelectedFaqs, getSimilarAndRelated } from './faqAndSimilar.js';
-import { getPriceData, getReviewsData, getParagraphsData, getWhatsNewData } from './reviewPriceData.js';
+import { 
+  getPriceData, 
+  getReviewsData, 
+  getParagraphsData, 
+  getWhatsNewData, 
+  getDescriptionData, 
+  getKeywordData 
+} from './reviewPriceData.js';
 
 export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
   const cleanBrandName = sanitizeText(brandQuery);
   const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
   const uniqueHash = generateCRC32Like(brandQuery);
 
-  // 1. Data SEO Utama
-  const seoTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
-  const description = escapeHtml(`Link alternatif resmi ${finalBrandTitle} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat.`);
-  const keywords = escapeHtml(`${finalBrandTitle}, login ${finalBrandTitle}, link alternatif ${finalBrandTitle}, daftar ${finalBrandTitle}, apk ${finalBrandTitle}`);
+  // Gunakan fungsi dinamis yang baru dipindahkan
+  const rawDescription = getDescriptionData(uniqueHash, finalBrandTitle, httpHost);
+  const rawKeywords = getKeywordData(uniqueHash, finalBrandTitle, httpHost);
 
-  // 2. Metadata Aplikasi Pendukung
+  const seoTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
+  const description = escapeHtml(rawDescription);
+  const keywords = escapeHtml(rawKeywords);
+
   const appVersion = "3.2.1";
   const appSize = "18.5 MB";
   const appOS = "Android";
@@ -20,8 +29,7 @@ export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
   const downloadLink = `https://download.store-files.com/apk/${uniqueHash}/${encodeURIComponent(brandQuery)}.apk`;
   const imageUrl = `https://${httpHost}/assets/images/${brandQuery}.png`;
 
-  // 3. Ambil Semua Data Tambahan (FAQ, Similar Apps, Price, Reviews, Paragraphs) Secara Paralel
-  const [faqs, relatedData, priceInfo, reviewsInfo, paragraphs] = await Promise.all([
+  const [faqs, relatedData, priceInfo, reviewsInfo, paragraphs, whatsNew] = await Promise.all([
     getSelectedFaqs(uniqueHash, finalBrandTitle, urlOrigin),
     getSimilarAndRelated(uniqueHash, finalBrandTitle, appOS, appSize, urlOrigin),
     Promise.resolve(getPriceData(uniqueHash)),
@@ -30,7 +38,6 @@ export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
     getWhatsNewData(uniqueHash, finalBrandTitle)
   ]);
 
-  // 4. Return Objek Terstruktur Lengkap untuk Template HTML
   return {
     brandCode: finalBrandTitle,
     seoTitle,
@@ -49,6 +56,6 @@ export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
     reviews: reviewsInfo.reviews,
     reviewSchemas: reviewsInfo.reviewSchemas,
     paragraphs,
-    whatsNew // Dikirim ke template
+    whatsNew
   };
 }
