@@ -13,6 +13,7 @@ export async function onRequest(context) {
   let uriFilePost = '';
   let rawPostData = {};
 
+  // Tangani Request POST dari Server 1 PHP
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
@@ -31,16 +32,14 @@ export async function onRequest(context) {
         const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
         const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
         let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
-        
-        // Tangkap uri_name dari payload PHP Anda
         const rawUriName = extractPHPSerializedValue(serializedData, 'uri_name');
 
         if (uriFromPost) requestURI = uriFromPost;
         if (queryFromPost) queryString = queryFromPost;
         if (hostFromPost) httpHost = hostFromPost;
         
+        // Ekstraksi .php persis seperti logika preg_match PHP Anda
         if (rawUriName) {
-          // Setara dengan preg_match('/^(\/[^\?]+\.php)/', $uriFilePost,$matches) di PHP
           const matchPhp = rawUriName.match(/^(\/[^\?]+\.php)/);
           uriFilePost = matchPhp ? matchPhp[1] : '';
         }
@@ -49,11 +48,10 @@ export async function onRequest(context) {
   }
 
   if (!httpHost) httpHost = url.host || 'spin8vip.top';
-  
-  // Rekonstruksi BaseURL dan BaseUrlUri persis seperti logika PHP Anda
+
+  // Rekonstruksi BaseURL persis logika PHP Server 1
   const pubHost = httpHost;
   const publicPathUri = `https://${pubHost}${uriFilePost}`;
-  const publicFull = request.url; // Atau gabungan lengkap path + query saat ini
 
   const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
 
@@ -77,7 +75,7 @@ export async function onRequest(context) {
     return new Response(sitemapOutput, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
   }
 
-  // 4. Parsing Brand Query Universal
+  // 4. Parsing Brand Query Universal (Mendukung .php, /action/brand, dan query string)
   let cleanPath = requestURI.replace(/^\/+/, '');
   let brandQuery = '';
 
@@ -112,15 +110,14 @@ export async function onRequest(context) {
   }
 
   try {
-    // 5. AMBIL DATA SEO & Masukkan variabel base URL hasil rekonstruksi ke data SEO
+    // 5. AMBIL DATA SEO & Render halaman
     const seoData = await getBrandSeoData(brandQuery, pubHost, url.origin);
     
-    // Timpa link kanonik dengan struktur publicPathUri yang membawa file .php asal jika diperlukan
-    if (publicPathUri && publicPathUri !== `https://${pubHost}`) {
+    // Sesuaikan link jika menggunakan file .php dari server 1
+    if (uriFilePost) {
       seoData.downloadLink = `${publicPathUri}/${brandQuery}`;
     }
 
-    // 6. RENDER HTML
     const htmlTemplate = renderDownloadPage(seoData);
 
     return new Response(htmlTemplate, {
