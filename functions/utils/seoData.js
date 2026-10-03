@@ -1,32 +1,24 @@
 import { escapeHtml, sanitizeText, generateCRC32Like } from './parser.js';
+import { getSelectedFaqs, getSimilarAndRelated } from './faqData.js';
 
-export function getBrandSeoData(brandQuery, httpHost) {
+export async function getBrandSeoData(brandQuery, httpHost, urlOrigin) {
   const cleanBrandName = sanitizeText(brandQuery);
   const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
   const uniqueHash = generateCRC32Like(brandQuery);
 
-  // 1. Title & Deskripsi Utama (Setara getSeoTitles & getDescriptionData)
   const seoTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
   const description = escapeHtml(`Link alternatif resmi ${finalBrandTitle} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat.`);
-  
-  // 2. Keywords (Setara getKeywordData)
   const keywords = escapeHtml(`${finalBrandTitle}, login ${finalBrandTitle}, link alternatif ${finalBrandTitle}, daftar ${finalBrandTitle}, apk ${finalBrandTitle}`);
 
-  // 3. Detail Aplikasi Pendukung (Versi, Ukuran, Rating, dll)
   const appVersion = "3.2.1";
   const appSize = "18.5 MB";
   const appOS = "Android";
-  const appDownloads = "100.000+";
   const appRating = "4.8";
-  const appCategory = "Gaming & Entertainment";
+  const downloadLink = `[https://download.store-files.com/apk/$](https://download.store-files.com/apk/$){uniqueHash}/${encodeURIComponent(brandQuery)}.apk`;
 
-  // 4. Download Link & Image URL
-  const downloadLink = `https://download.store-files.com/apk/${uniqueHash}/${encodeURIComponent(brandQuery)}.apk`;
-  const imageUrl = `https://${httpHost}/assets/images/${brandQuery}.png`;
-
-  // 5. Data Tambahan (FAQ, WhatsNew, Background Colors - Opsional untuk pengembangan)
-  const paragraphs = `${finalBrandTitle} adalah platform digital dan hiburan terkemuka yang menawarkan pengalaman bermain game online yang mulus, aman, dan responsif di berbagai perangkat seluler.`;
-  const whatsNew = `Pembaruan sistem keamanan terbaru, peningkatan kecepatan unduh APK, serta penambahan server game anti-lag.`;
+  // Panggil data FAQ dan Similar Apps secara asynchronous
+  const faqs = await getSelectedFaqs(uniqueHash, finalBrandTitle, urlOrigin);
+  const relatedData = await getSimilarAndRelated(uniqueHash, finalBrandTitle, appOS, appSize, urlOrigin);
 
   return {
     brandCode: finalBrandTitle,
@@ -36,12 +28,10 @@ export function getBrandSeoData(brandQuery, httpHost) {
     appVersion,
     appSize,
     appOS,
-    appDownloads,
     appRating,
-    appCategory,
-    imageUrl,
     downloadLink,
-    paragraphs,
-    whatsNew
+    faqs,
+    similarApps: relatedData.similarApps,
+    relatedTopics: relatedData.relatedTopics
   };
 }
