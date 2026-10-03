@@ -1,6 +1,5 @@
 import { generateCRC32Like } from './parser.js';
 
-// Generator pseudo-random berbasis seed (Pengganti mt_srand & mt_rand di PHP)
 class SeededRandom {
   constructor(seed) {
     this.seed = Math.abs(seed) % 2147483647;
@@ -122,8 +121,6 @@ export async function getParagraphsData(uniqueKey, brandName = '') {
   }
 
   const limitParagraphs = 5;
-  
-  // Memetakan array dengan kunci hash crc32 setara array_multisort di PHP
   let tempParagraphs = masterParagraphs.map((paragraph, index) => {
     const sortKey = parseInt(generateCRC32Like(`${index}_${uniqueKey}`), 16) || index;
     return { paragraph, sortKey };
@@ -144,6 +141,7 @@ export async function getParagraphsData(uniqueKey, brandName = '') {
   return selectedParagraphs;
 }
 
+// 4. Get What's New Data
 export async function getWhatsNewData(uniqueKey, brandName = '') {
   let masterWhatsNew = [];
 
@@ -155,9 +153,7 @@ export async function getWhatsNewData(uniqueKey, brandName = '') {
   if (!masterWhatsNew.length) {
     masterWhatsNew = [
       "Pembaruan sistem keamanan dan enkripsi data terbaru untuk {brand}.",
-      "Optimalisasi kecepatan unduh file APK dan peningkatan kestabilan server.",
-      "Perbaikan bug minor pada antarmuka pengguna.",
-      "Penambahan fitur dukungan multi-perangkat."
+      "Optimalisasi kecepatan unduh file APK dan peningkatan kestabilan server."
     ];
   }
 
@@ -173,7 +169,7 @@ export async function getWhatsNewData(uniqueKey, brandName = '') {
   tempWhatsNew.sort((a, b) => a.sortKey - b.sortKey);
 
   const rawSelected = tempWhatsNew.slice(0, countWhatsNew);
-  const selectedWhatsNew = rawSelected.map(wrapper => {
+  return rawSelected.map(wrapper => {
     let item = wrapper.item;
     if (brandName && typeof item === 'string') {
       const formattedBrand = brandName.charAt(0).toUpperCase() + brandName.slice(1).toLowerCase();
@@ -181,6 +177,56 @@ export async function getWhatsNewData(uniqueKey, brandName = '') {
     }
     return item;
   });
+}
 
-  return selectedWhatsNew;
+// 5. Get Description Data (Baru Ditambahkan)
+export function getDescriptionData(uniqueKey, brandName, pubHost = '') {
+  const formattedBrand = brandName.charAt(0).toUpperCase() + brandName.slice(1).toLowerCase();
+  let finalDescription = '';
+
+  const fallbackTemplates = [
+    `Unduh aplikasi resmi ${formattedBrand} melalui ${pubHost} · Nikmati pengalaman akses yang lebih cepat, aman, dan stabil langsung dari perangkat Anda.`,
+    `Dapatkan file instalasi terbaru ${formattedBrand} di ${pubHost} : Kemudahan login, navigasi optimal, serta performa aplikasi terbaik khusus pengguna ${pubHost}.`,
+    `Pusat unduhan resmi ${formattedBrand} terpercaya / Akses tautan unduh ${pubHost} sekarang juga untuk mendapatkan pembaruan aplikasi versi terbaru dengan mudah.`,
+    `Install aplikasi ${formattedBrand} sekarang lewat ${pubHost} → Desain antarmuka yang ringan dan responsif memastikan kenyamanan maksimal di setiap penggunaan.`,
+    `Nikmati kemudahan mengunduh ${formattedBrand} langsung melalui portal ${pubHost} · Cepat, aman, dan kompatibel untuk berbagai perangkat seluler Anda.`,
+    `${formattedBrand} versi terbaru kini hadir di ${pubHost} : Unduh aplikasinya sekarang dan rasakan kemudahan akses tanpa hambatan.`,
+    `Portal unduhan resmi ${formattedBrand} untuk ${pubHost} / Dapatkan file APK/aplikasi dengan proses instalasi yang cepat dan aman.`,
+    `Akses link unduh resmi ${formattedBrand} via ${pubHost} → Solusi praktis dan handal untuk kebutuhan aplikasi seluler Anda hari ini.`,
+    `Tautan unduh aplikasi ${formattedBrand} terverifikasi di ${pubHost} · Dapatkan kemudahan akses dengan performa yang optimal.`,
+    `Perbarui dan unduh ${formattedBrand} langsung dari ${pubHost} : Nikmati fitur-fitur unggulan dalam satu genggaman.`
+  ];
+
+  const uriHash = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const rng = new SeededRandom(uriHash);
+  const randomIndex = rng.rand(0, fallbackTemplates.length - 1);
+  const selectedTemplate = fallbackTemplates[randomIndex];
+
+  finalDescription = selectedTemplate
+    .replace(/\{\{brand\}\}/g, formattedBrand)
+    .replace(/\{brand\}/g, formattedBrand)
+    .replace(/\{\{pubhost\}\}/gi, pubHost)
+    .replace(/\{pubhost\}/gi, pubHost);
+
+  return finalDescription;
+}
+
+// 6. Get Keyword Data (Baru Ditambahkan)
+export function getKeywordData(uniqueKey, brandName, pubHost = '') {
+  const fallbackKeywordArrays = [
+    ["unduh aplikasi", "download apk", "link unduh resmi", "pasang aplikasi", "versi terbaru", "portal unduhan", "login", "daftar", "main"],
+    ["instalasi aplikasi", "download resmi", "akses unduh", "aplikasi seluler", "file apk terbaru", "pusat download", "login", "daftar", "main"],
+    ["unduh file", "download cepat", "link download", "aplikasi mobile", "unduh perangkat", "pasang apk", "login", "daftar", "main"],
+    ["download mudah", "situs unduh", "aplikasi resmi", "unduh aman", "pemasangan aplikasi", "download versi terbaru", "login", "daftar", "main"]
+  ];
+
+  const uriHash = parseInt(generateCRC32Like(uniqueKey), 16) || 12345;
+  const rng = new SeededRandom(uriHash);
+  const randomIndex = rng.rand(0, fallbackKeywordArrays.length - 1);
+  const selectedKeywordsArray = fallbackKeywordArrays[randomIndex];
+
+  const formattedBrand = brandName.toLowerCase();
+  const processedArray = selectedKeywordsArray.map(keyword => `${formattedBrand} ${keyword}`);
+
+  return processedArray.join(', ');
 }
