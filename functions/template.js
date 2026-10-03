@@ -1,32 +1,32 @@
 export function renderDownloadPage(data) {
   const {
-    brandCode,
-    seoTitle,
-    description,
-    keywords,
-    appVersion,
-    appSize,
-    appOS,
-    appDownloads,
-    appBahasa,
-    displayDate,
-    appSha,
-    appDate,
-    appRating,
-    appReviewCount,
-    imageUrl,
-    appCategory,
-    bgColors,
-    downloadLink,
-    faqs,
-    similarApps,
-    relatedTopics,
-    priceData,
-    reviews,
-    reviewSchemas,
-    paragraphs,
-    whatsNew
-  } = data;
+    brandCode = 'App',
+    seoTitle = 'Download Aplikasi Resmi',
+    description = 'Unduh aplikasi dan game terbaru dengan aman.',
+    keywords = 'download, apk, aplikasi',
+    appVersion = '1.0.0',
+    appSize = '18.5 MB',
+    appOS = 'Android',
+    appDownloads = '100.000+',
+    appBahasa = 'Indonesia',
+    displayDate = 'Terbaru',
+    appSha = 'sha256-verified',
+    appDate = new Date().toISOString().split('T')[0],
+    appRating = '4.8',
+    appReviewCount = '1250',
+    imageUrl = 'https://dummyimage.com/120x120/007a99/ffffff.png&text=App',
+    appCategory = 'Tools',
+    bgColors = { bg1: '007a99', bg2: '005f73', bg3: '0a9396', bg4: '94d2bd' },
+    downloadLink = '#',
+    faqs = [],
+    similarApps = [],
+    relatedTopics = [],
+    priceData = { appPrice: '0', priceCurrency: 'Rp' },
+    reviews = [],
+    reviewSchemas = [],
+    paragraphs = [],
+    whatsNew = []
+  } = data || {};
 
   const currentYear = new Date().getFullYear();
   const formattedBrand = brandCode.charAt(0).toUpperCase() + brandCode.slice(1).toLowerCase();
@@ -35,9 +35,9 @@ export function renderDownloadPage(data) {
   const reviewSchemasJson = JSON.stringify(reviewSchemas, null, 2);
 
   // Format HTML untuk FAQ Schema
-  const faqSchemaItems = faqs.map(faq => {
-    const qText = faq.q.replace(/\{brand\}/g, formattedBrand);
-    const aText = faq.a.replace(/\{brand\}/g, formattedBrand);
+  const faqSchemaItems = (faqs || []).map(faq => {
+    const qText = (faq.q || '').replace(/\{brand\}/g, formattedBrand);
+    const aText = (faq.a || '').replace(/\{brand\}/g, formattedBrand);
     return `{
       "@type": "Question",
       "name": ${JSON.stringify(qText)},
@@ -284,8 +284,8 @@ export function renderDownloadPage(data) {
                         
                             <div class="price-row" style="margin: 8px 0; font-weight: bold;">
                                 ${priceData.appPrice === "0" 
-                                  ? '<span style="color: #ffffff; background: #c0392b; padding: 3px 8px; border-radius: 4px;">Gratis</span>' 
-                                  : `<span style="color: #a93226;">${priceData.priceCurrency}${Number(priceData.appPrice).toLocaleString('id-ID')}</span>`
+                                    ? '<span style="color: #ffffff; background: #c0392b; padding: 3px 8px; border-radius: 4px;">Gratis</span>' 
+                                    : `<span style="color: #a93226;">${priceData.priceCurrency}${Number(priceData.appPrice).toLocaleString('id-ID')}</span>`
                                 }
                             </div>
                         
@@ -311,18 +311,18 @@ export function renderDownloadPage(data) {
                     <div class="whats-new">
                         <h3>Apa yang Baru di Versi ${appVersion}?</h3>
                         <ul>
-                            ${whatsNew.map(item => `<li>${item.replace(/\{brand\}/g, formattedBrand).replace(/\{os\}/g, appOS)}</li>`).join('')}
+                            ${(whatsNew || []).map(item => `<li>${item.replace(/\{brand\}/g, formattedBrand).replace(/\{os\}/g, appOS)}</li>`).join('')}
                         </ul>
                     </div>
 
                     <div class="rich-content">
-                        ${paragraphs.map(p => `<p>${p.replace(/\{brand\}/g, formattedBrand).replace(/\{downloads\}/g, appDownloads).replace(/\{size\}/g, appSize).replace(/\{os\}/g, appOS)}</p>`).join('')}
+                        ${(paragraphs || []).map(p => `<p>${p.replace(/\{brand\}/g, formattedBrand).replace(/\{downloads\}/g, appDownloads).replace(/\{size\}/g, appSize).replace(/\{os\}/g, appOS)}</p>`).join('')}
                     </div>
                 </div>
 
                 <div class="card">
                     <h2 class="section-title">Pertanyaan Umum (FAQ)</h2>
-                    ${faqs.map(faq => `
+                    ${(faqs || []).map(faq => `
                         <div class="faq-box">
                             <h3>${faq.q.replace(/\{brand\}/g, formattedBrand)}</h3>
                             <p>${faq.a.replace(/\{brand\}/g, formattedBrand)}</p>
@@ -332,7 +332,7 @@ export function renderDownloadPage(data) {
 
                 <div class="card">
                     <h2 class="section-title">Ulasan Pengguna (Top Comments)</h2>
-                    ${reviews.map(review => `
+                    ${(reviews || []).map(review => `
                         <div class="review">
                             <div class="rev-header">
                                 <div class="rev-user">
@@ -350,7 +350,7 @@ export function renderDownloadPage(data) {
                 <div class="card">
                     <h2 class="section-title">Jelajahi Serupa</h2>
                     <div class="similar-grid">
-                        ${similarApps.map(item => `
+                         ${(similarApps || []).map(item => `
                             <a href="${item.slug}" class="sim-app">
                                 <img src="https://dummyimage.com/144x144/${item.bgHex}/fff.png&text=${item.firstLetter}" class="sim-icon" alt="Icon" width="72" height="72" loading="lazy">
                                 <div class="sim-title">${item.title}</div>
@@ -362,7 +362,7 @@ export function renderDownloadPage(data) {
                 <div class="card">
                     <h2 class="section-title">Topik Terkait</h2>
                     <div class="tags">
-                        ${relatedTopics.map(item => `
+                        ${(relatedTopics || []).map(item => `
                             <a href="${item.slug}" class="tag">${item.title}</a>
                         `).join('')}
                     </div>
