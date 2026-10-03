@@ -285,7 +285,7 @@ export function renderDownloadPage(data) {
                             <div class="price-row" style="margin: 8px 0; font-weight: bold;">
                                 ${priceData.appPrice === "0" 
                                     ? '<span style="color: #ffffff; background: #c0392b; padding: 3px 8px; border-radius: 4px;">Gratis</span>' 
-                                    : `<span style="color: #a93226;">${priceData.priceCurrency \vert{}\vert{} 'IDR'}${Number(priceData.appPrice).toLocaleString('id-ID')}</span>`
+                                    : `<span style="color: #a93226;">${priceData.priceCurrency || 'IDR'} ${Number(priceData.appPrice).toLocaleString('id-ID')}</span>`
                                 }
                             </div>
                         
